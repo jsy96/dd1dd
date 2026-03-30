@@ -242,8 +242,8 @@ app.post('/api/process', upload.single('manifest'), async (req, res) => {
 
     // 保存文件
     const timestamp = Date.now();
-    const wordFileName = `提单确认件_${timestamp}.doc`;
-    const excelFileName = `装箱单发票_${timestamp}.xls`;
+    const wordFileName = `提单确认件_${timestamp}.docx`;
+    const excelFileName = `装箱单发票_${timestamp}.xlsx`;
     
     const wordFilePath = path.join('/tmp', wordFileName);
     const excelFilePath = path.join('/tmp', excelFileName);
@@ -282,8 +282,8 @@ app.post('/api/regenerate', async (req, res) => {
 
     // 保存文件
     const timestamp = Date.now();
-    const wordFileName = `提单确认件_${timestamp}.doc`;
-    const excelFileName = `装箱单发票_${timestamp}.xls`;
+    const wordFileName = `提单确认件_${timestamp}.docx`;
+    const excelFileName = `装箱单发票_${timestamp}.xlsx`;
     
     const wordFilePath = path.join('/tmp', wordFileName);
     const excelFilePath = path.join('/tmp', excelFileName);
