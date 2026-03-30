@@ -49,7 +49,7 @@
           <div class="flex flex-col items-center">
             <i data-lucide="upload-cloud" class="w-12 h-12 text-gray-400 mb-3"></i>
             <p class="text-gray-500 mb-2">点击或拖拽文件到此处</p>
-            <button onclick="document.getElementById('fileInput').click()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm transition-colors">
+            <button onclick="event.stopPropagation(); document.getElementById('fileInput').click()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm transition-colors">
               选择文件
             </button>
           </div>
@@ -242,7 +242,7 @@
     });
 
     document.getElementById('downloadExcel').addEventListener('click', () => {
-      if (excelFileUrl) downloadFile(excelFileUrl, '装箱单发票.xls');
+      if (excelFileUrl) downloadFile(excelFileUrl, '装箱单发票.xlsx');
     });
 
     async function downloadFile(url, filename) {
