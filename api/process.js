@@ -78,6 +78,22 @@ function parseManifestExcel(buffer) {
   return data;
 }
 
+// 安全转换为整数：如果是数字或数字字符串则转换为整数，否则返回空字符串
+function safeToInt(value) {
+  if (value === '' || value === null || value === undefined) {
+    return '';
+  }
+  // 尝试转换为数字
+  const num = Number(value);
+  // 检查是否为有效数字且不是NaN
+  if (!isNaN(num) && isFinite(num)) {
+    // 转换为整数
+    return Math.floor(num).toString();
+  }
+  // 如果不是有效数字，返回空字符串
+  return '';
+}
+
 // 生成 Word 文档
 async function generateWordDocument(data) {
   const templatePath = path.join(__dirname, '../templates/提单确认件的格式.docx');
@@ -115,9 +131,9 @@ async function generateWordDocument(data) {
     箱号: data.箱号,
     封号: data.封号,
     箱型: data.箱型,
-    件数: data.件数,
-    毛重: data.毛重,
-    体积: data.体积,
+    件数: safeToInt(data.件数),
+    毛重: safeToInt(data.毛重),
+    体积: safeToInt(data.体积),
     公司名: data.发货人名称,
     公司地址: data.发货人地址,
     电话: data.发货人电话,
@@ -291,9 +307,9 @@ async function generateCombinedLetter(firstData, allCargoData) {
       containerData[`箱号${suffix}`] = cargo.箱号 || '';
       containerData[`箱型${suffix}`] = cargo.箱型 || '';
       containerData[`封号${suffix}`] = cargo.封号 || '';
-      containerData[`件数${suffix}`] = cargo.件数 || '';
-      containerData[`毛重${suffix}`] = cargo.毛重 || '';
-      containerData[`体积${suffix}`] = cargo.体积 || '';
+      containerData[`件数${suffix}`] = safeToInt(cargo.件数);
+      containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
+      containerData[`体积${suffix}`] = safeToInt(cargo.体积);
     } else {
       // 填充空的占位符
       containerData[`提单号${suffix}`] = '';
@@ -324,9 +340,9 @@ async function generateCombinedLetter(firstData, allCargoData) {
     箱号: firstData.箱号,
     封号: firstData.封号,
     箱型: firstData.箱型,
-    件数: firstData.件数,
-    毛重: firstData.毛重,
-    体积: firstData.体积,
+    件数: safeToInt(firstData.件数),
+    毛重: safeToInt(firstData.毛重),
+    体积: safeToInt(firstData.体积),
     公司名: firstData.发货人名称,
     公司地址: firstData.发货人地址,
     电话: firstData.发货人电话,
@@ -407,9 +423,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     '{箱号}': firstData.箱号 || '',
     '{封号}': firstData.封号 || '',
     '{箱型}': firstData.箱型 || '',
-    '{件数}': firstData.件数 || '',
-    '{毛重}': firstData.毛重 || '',
-    '{体积}': firstData.体积 || '',
+    '{件数}': safeToInt(firstData.件数),
+    '{毛重}': safeToInt(firstData.毛重),
+    '{体积}': safeToInt(firstData.体积),
     '{发货人名称}': firstData.发货人名称 || '',
     '{发货人地址}': firstData.发货人地址 || '',
     '{发货人电话}': firstData.发货人电话 || '',
@@ -437,9 +453,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{箱号${suffix}}`] = cargo.箱号 || '';
       replacementData[`{箱型${suffix}}`] = cargo.箱型 || '';
       replacementData[`{封号${suffix}}`] = cargo.封号 || '';
-      replacementData[`{件数${suffix}}`] = cargo.件数 || '';
-      replacementData[`{毛重${suffix}}`] = cargo.毛重 || '';
-      replacementData[`{体积${suffix}}`] = cargo.体积 || '';
+      replacementData[`{件数${suffix}}`] = safeToInt(cargo.件数);
+      replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
+      replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -538,9 +554,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     '{箱号}': firstData.箱号 || '',
     '{封号}': firstData.封号 || '',
     '{箱型}': firstData.箱型 || '',
-    '{件数}': firstData.件数 || '',
-    '{毛重}': firstData.毛重 || '',
-    '{体积}': firstData.体积 || '',
+    '{件数}': safeToInt(firstData.件数),
+    '{毛重}': safeToInt(firstData.毛重),
+    '{体积}': safeToInt(firstData.体积),
     '{发货人名称}': firstData.发货人名称 || '',
     '{发货人地址}': firstData.发货人地址 || '',
     '{发货人电话}': firstData.发货人电话 || '',
@@ -568,9 +584,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{箱号${suffix}}`] = cargo.箱号 || '';
       replacementData[`{箱型${suffix}}`] = cargo.箱型 || '';
       replacementData[`{封号${suffix}}`] = cargo.封号 || '';
-      replacementData[`{件数${suffix}}`] = cargo.件数 || '';
-      replacementData[`{毛重${suffix}}`] = cargo.毛重 || '';
-      replacementData[`{体积${suffix}}`] = cargo.体积 || '';
+      replacementData[`{件数${suffix}}`] = safeToInt(cargo.件数);
+      replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
+      replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
