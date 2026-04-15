@@ -255,6 +255,268 @@ async function generateExcelDocument(data) {
   return workbook.xlsx.writeBuffer();
 }
 
+// 生成并单保函 Word 文档
+async function generateCombinedLetter(data) {
+  const templatePath = path.join(__dirname, '../templates/并单保函的格式.docx');
+  const templateBuffer = await fs.readFile(templatePath);
+
+  const zip = new PizZip(templateBuffer);
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+
+  // 商品列表 - 严格按舱单文件中的英文品名数量处理
+  const englishNames = data.英文品名 || '';
+  const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  // 确保商品数量不超过22个，如果超过则截断并记录警告
+  if (goodsList.length > 22) {
+    console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
+  }
+  const goodsData = {};
+  for (let i = 1; i <= 22; i++) {
+    // 只使用舱单文件中存在的商品，不存在则设置为空字符串
+    goodsData[`商品${i}`] = i <= goodsList.length ? goodsList[i - 1] : '';
+  }
+
+  doc.setData({
+    船名: data.船名,
+    航次: data.航次,
+    目的港: data.目的港,
+    提单号: data.提单号,
+    箱号: data.箱号,
+    封号: data.封号,
+    箱型: data.箱型,
+    件数: data.件数,
+    毛重: data.毛重,
+    体积: data.体积,
+    公司名: data.发货人名称,
+    公司地址: data.发货人地址,
+    电话: data.发货人电话,
+    传真: '',
+    电子邮箱: '',
+    许可证号: '',
+    收货地址: data.收货人地址,
+    邮编: '',
+    手机号: '',
+    电话号码: data.收货人电话,
+    姓名: data.通知人名称,
+    地址: data.通知人地址,
+    ...goodsData,
+  });
+
+  doc.render();
+  return doc.getZip().generate({ type: 'nodebuffer' });
+}
+
+// 生成总提单OK件（带HS）Excel 文档
+async function generateOKBillWithHS(data) {
+  const templatePath = path.join(__dirname, '../templates/总提单OK件的格式(带HS的.xlsx');
+  const templateBuffer = await fs.readFile(templatePath);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(templateBuffer);
+
+  if (workbook.worksheets.length === 0) {
+    throw new Error('无法加载 Excel 模板');
+  }
+
+  // 使用与现有 Excel 生成相同的替换逻辑
+  const today = new Date();
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const formattedDate = `${months[today.getMonth()]}. ${String(today.getDate()).padStart(2, '0')}. ${today.getFullYear()}`;
+
+  const getCellText = (cell) => {
+    if (!cell.value) return '';
+    if (typeof cell.value === 'string') return cell.value;
+    if (cell.value.richText) {
+      return cell.value.richText.map(rt => rt.text || '').join('');
+    }
+    return '';
+  };
+
+  const replacePlaceholder = (cell, placeholder, replacement) => {
+    const text = getCellText(cell);
+    if (text.includes(placeholder)) {
+      let font = {};
+      if (cell.value?.richText && cell.value.richText.length > 0) {
+        font = cell.value.richText[0].font || {};
+      }
+      cell.value = {
+        richText: [{
+          font: font,
+          text: replacement
+        }]
+      };
+      return true;
+    }
+    return false;
+  };
+
+  // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
+  const englishNames = data.英文品名 || '';
+  const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  // 确保商品数量不超过22个，如果超过则截断并记录警告
+  if (goodsList.length > 22) {
+    console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
+  }
+  const replacementData = {
+    '{发票日期}': formattedDate,
+    '{船名}': data.船名 || '',
+    '{航次}': data.航次 || '',
+    '{目的港}': data.目的港 || '',
+    '{提单号}': data.提单号 || '',
+    '{箱号}': data.箱号 || '',
+    '{封号}': data.封号 || '',
+    '{箱型}': data.箱型 || '',
+    '{件数}': data.件数 || '',
+    '{毛重}': data.毛重 || '',
+    '{体积}': data.体积 || '',
+    '{发货人名称}': data.发货人名称 || '',
+    '{发货人地址}': data.发货人地址 || '',
+    '{发货人电话}': data.发货人电话 || '',
+    '{收货人名称}': data.收货人名称 || '',
+    '{收货人地址}': data.收货人地址 || '',
+    '{收货人电话}': data.收货人电话 || '',
+    '{通知人名称}': data.通知人名称 || '',
+    '{通知人地址}': data.通知人地址 || '',
+    '{通知人电话}': data.通知人电话 || '',
+  };
+
+  // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
+  for (let i = 1; i <= 22; i++) {
+    const placeholder = `{商品${i}}`;
+    replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
+  }
+
+  console.log('总提单OK件（带HS）替换数据:', {
+    提单号: data.提单号,
+    商品列表长度: goodsList.length,
+    商品列表内容: goodsList,
+  });
+
+  // 处理所有 sheet
+  workbook.worksheets.forEach((worksheet, sheetIndex) => {
+    let replacedCount = 0;
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        for (const [placeholder, replacement] of Object.entries(replacementData)) {
+          if (replacePlaceholder(cell, placeholder, replacement)) {
+            replacedCount++;
+          }
+        }
+      });
+    });
+    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符`);
+  });
+
+  return workbook.xlsx.writeBuffer();
+}
+
+// 生成总提单OK件（无HS）Excel 文档
+async function generateOKBillWithoutHS(data) {
+  const templatePath = path.join(__dirname, '../templates/总提单OK件的格式(无HS的.xlsx');
+  const templateBuffer = await fs.readFile(templatePath);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(templateBuffer);
+
+  if (workbook.worksheets.length === 0) {
+    throw new Error('无法加载 Excel 模板');
+  }
+
+  // 使用与现有 Excel 生成相同的替换逻辑
+  const today = new Date();
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const formattedDate = `${months[today.getMonth()]}. ${String(today.getDate()).padStart(2, '0')}. ${today.getFullYear()}`;
+
+  const getCellText = (cell) => {
+    if (!cell.value) return '';
+    if (typeof cell.value === 'string') return cell.value;
+    if (cell.value.richText) {
+      return cell.value.richText.map(rt => rt.text || '').join('');
+    }
+    return '';
+  };
+
+  const replacePlaceholder = (cell, placeholder, replacement) => {
+    const text = getCellText(cell);
+    if (text.includes(placeholder)) {
+      let font = {};
+      if (cell.value?.richText && cell.value.richText.length > 0) {
+        font = cell.value.richText[0].font || {};
+      }
+      cell.value = {
+        richText: [{
+          font: font,
+          text: replacement
+        }]
+      };
+      return true;
+    }
+    return false;
+  };
+
+  // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
+  const englishNames = data.英文品名 || '';
+  const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  // 确保商品数量不超过22个，如果超过则截断并记录警告
+  if (goodsList.length > 22) {
+    console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
+  }
+  const replacementData = {
+    '{发票日期}': formattedDate,
+    '{船名}': data.船名 || '',
+    '{航次}': data.航次 || '',
+    '{目的港}': data.目的港 || '',
+    '{提单号}': data.提单号 || '',
+    '{箱号}': data.箱号 || '',
+    '{封号}': data.封号 || '',
+    '{箱型}': data.箱型 || '',
+    '{件数}': data.件数 || '',
+    '{毛重}': data.毛重 || '',
+    '{体积}': data.体积 || '',
+    '{发货人名称}': data.发货人名称 || '',
+    '{发货人地址}': data.发货人地址 || '',
+    '{发货人电话}': data.发货人电话 || '',
+    '{收货人名称}': data.收货人名称 || '',
+    '{收货人地址}': data.收货人地址 || '',
+    '{收货人电话}': data.收货人电话 || '',
+    '{通知人名称}': data.通知人名称 || '',
+    '{通知人地址}': data.通知人地址 || '',
+    '{通知人电话}': data.通知人电话 || '',
+  };
+
+  // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
+  for (let i = 1; i <= 22; i++) {
+    const placeholder = `{商品${i}}`;
+    replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
+  }
+
+  console.log('总提单OK件（无HS）替换数据:', {
+    提单号: data.提单号,
+    商品列表长度: goodsList.length,
+    商品列表内容: goodsList,
+  });
+
+  // 处理所有 sheet
+  workbook.worksheets.forEach((worksheet, sheetIndex) => {
+    let replacedCount = 0;
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        for (const [placeholder, replacement] of Object.entries(replacementData)) {
+          if (replacePlaceholder(cell, placeholder, replacement)) {
+            replacedCount++;
+          }
+        }
+      });
+    });
+    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符`);
+  });
+
+  return workbook.xlsx.writeBuffer();
+}
+
 // Buffer to base64
 function bufferToBase64(buffer) {
   return buffer.toString('base64');
@@ -285,6 +547,17 @@ module.exports = async (req, res) => {
     const files = Array.isArray(manifestFiles) ? manifestFiles : [manifestFiles];
 
     console.log(`开始批量处理 ${files.length} 个文件`);
+
+    // 解析第一个文件的数据用于生成汇总文件
+    let firstCargoData = null;
+    if (files.length > 0) {
+      try {
+        firstCargoData = parseManifestExcel(files[0].buffer);
+        console.log(`第一个文件提单号: ${firstCargoData.提单号}, 将用于生成汇总文件`);
+      } catch (parseError) {
+        console.error('解析第一个文件失败，跳过生成汇总文件:', parseError);
+      }
+    }
 
     // 创建 ZIP 归档
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -322,6 +595,30 @@ module.exports = async (req, res) => {
       } catch (fileError) {
         console.error(`处理文件 ${i + 1} 失败:`, fileError);
         throw new Error(`第 ${i + 1} 个文件处理失败: ${fileError.message}`);
+      }
+    }
+
+    // 生成三个汇总文件（使用第一个文件的数据）
+    if (firstCargoData) {
+      try {
+        const safeBillNumber = firstCargoData.提单号 ? firstCargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : '汇总';
+
+        // 生成并单保函
+        const combinedLetterBuffer = await generateCombinedLetter(firstCargoData);
+        archive.append(combinedLetterBuffer, { name: `A/${safeBillNumber}并单保函的格式.docx` });
+        console.log(`生成汇总文件: A/${safeBillNumber}并单保函的格式.docx`);
+
+        // 生成总提单OK件（带HS）
+        const okWithHSBuffer = await generateOKBillWithHS(firstCargoData);
+        archive.append(okWithHSBuffer, { name: `A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx` });
+        console.log(`生成汇总文件: A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx`);
+
+        // 生成总提单OK件（无HS）
+        const okWithoutHSBuffer = await generateOKBillWithoutHS(firstCargoData);
+        archive.append(okWithoutHSBuffer, { name: `A/${safeBillNumber}总提单OK件的格式(无HS的.xlsx` });
+        console.log(`生成汇总文件: A/${safeBillNumber}总提单OK件的格式(无HS的.xlsx`);
+      } catch (summaryError) {
+        console.error('生成汇总文件失败，跳过:', summaryError);
       }
     }
 
@@ -378,3 +675,10 @@ async function parseFormData(req) {
     req.pipe(busboy);
   });
 }
+
+module.exports.parseManifestExcel = parseManifestExcel;
+module.exports.generateWordDocument = generateWordDocument;
+module.exports.generateExcelDocument = generateExcelDocument;
+module.exports.generateCombinedLetter = generateCombinedLetter;
+module.exports.generateOKBillWithHS = generateOKBillWithHS;
+module.exports.generateOKBillWithoutHS = generateOKBillWithoutHS;
