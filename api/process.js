@@ -279,20 +279,42 @@ async function generateCombinedLetter(firstData, allCargoData) {
     goodsData[`商品${i}`] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 生成提单号映射：提单号1, 提单号2, ...
-  const billNumberData = {};
-  for (let i = 0; i < allCargoData.length; i++) {
-    const billNumber = allCargoData[i].提单号 || '';
-    billNumberData[`提单号${i + 1}`] = billNumber;
+  // 生成所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  const containerData = {};
+  const maxContainers = 20; // 假设模板最多支持20个舱单
+
+  for (let i = 0; i < maxContainers; i++) {
+    const suffix = i + 1;
+    if (i < allCargoData.length) {
+      const cargo = allCargoData[i];
+      containerData[`提单号${suffix}`] = cargo.提单号 || '';
+      containerData[`箱号${suffix}`] = cargo.箱号 || '';
+      containerData[`箱型${suffix}`] = cargo.箱型 || '';
+      containerData[`封号${suffix}`] = cargo.封号 || '';
+      containerData[`件数${suffix}`] = cargo.件数 || '';
+      containerData[`毛重${suffix}`] = cargo.毛重 || '';
+      containerData[`体积${suffix}`] = cargo.体积 || '';
+    } else {
+      // 填充空的占位符
+      containerData[`提单号${suffix}`] = '';
+      containerData[`箱号${suffix}`] = '';
+      containerData[`箱型${suffix}`] = '';
+      containerData[`封号${suffix}`] = '';
+      containerData[`件数${suffix}`] = '';
+      containerData[`毛重${suffix}`] = '';
+      containerData[`体积${suffix}`] = '';
+    }
   }
 
-  // 假设模板最多支持20个提单号，填充空的占位符
-  const maxBillNumbers = 20;
-  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
-    billNumberData[`提单号${i}`] = '';
-  }
-
-  console.log('并单保函提单号数据:', billNumberData);
+  console.log('并单保函舱单数据（前3个）:', {
+    提单号1: containerData['提单号1'],
+    箱号1: containerData['箱号1'],
+    箱型1: containerData['箱型1'],
+    封号1: containerData['封号1'],
+    件数1: containerData['件数1'],
+    毛重1: containerData['毛重1'],
+    体积1: containerData['体积1'],
+  });
 
   doc.setData({
     船名: firstData.船名,
@@ -318,7 +340,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
     姓名: firstData.通知人名称,
     地址: firstData.通知人地址,
     ...goodsData,
-    ...billNumberData,
+    ...containerData,
   });
 
   doc.render();
@@ -405,18 +427,29 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 添加提单号映射：提单号1, 提单号2, ...
-  for (let i = 0; i < allCargoData.length; i++) {
-    const billNumber = allCargoData[i].提单号 || '';
-    const placeholder = `{提单号${i + 1}}`;
-    replacementData[placeholder] = billNumber;
-  }
-
-  // 假设模板最多支持20个提单号，填充空的占位符
-  const maxBillNumbers = 20;
-  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
-    const placeholder = `{提单号${i}}`;
-    replacementData[placeholder] = '';
+  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  const maxContainers = 20; // 假设模板最多支持20个舱单
+  for (let i = 0; i < maxContainers; i++) {
+    const suffix = i + 1;
+    if (i < allCargoData.length) {
+      const cargo = allCargoData[i];
+      replacementData[`{提单号${suffix}}`] = cargo.提单号 || '';
+      replacementData[`{箱号${suffix}}`] = cargo.箱号 || '';
+      replacementData[`{箱型${suffix}}`] = cargo.箱型 || '';
+      replacementData[`{封号${suffix}}`] = cargo.封号 || '';
+      replacementData[`{件数${suffix}}`] = cargo.件数 || '';
+      replacementData[`{毛重${suffix}}`] = cargo.毛重 || '';
+      replacementData[`{体积${suffix}}`] = cargo.体积 || '';
+    } else {
+      // 填充空的占位符
+      replacementData[`{提单号${suffix}}`] = '';
+      replacementData[`{箱号${suffix}}`] = '';
+      replacementData[`{箱型${suffix}}`] = '';
+      replacementData[`{封号${suffix}}`] = '';
+      replacementData[`{件数${suffix}}`] = '';
+      replacementData[`{毛重${suffix}}`] = '';
+      replacementData[`{体积${suffix}}`] = '';
+    }
   }
 
   console.log('总提单OK件（带HS）替换数据:', {
@@ -525,18 +558,29 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 添加提单号映射：提单号1, 提单号2, ...
-  for (let i = 0; i < allCargoData.length; i++) {
-    const billNumber = allCargoData[i].提单号 || '';
-    const placeholder = `{提单号${i + 1}}`;
-    replacementData[placeholder] = billNumber;
-  }
-
-  // 假设模板最多支持20个提单号，填充空的占位符
-  const maxBillNumbers = 20;
-  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
-    const placeholder = `{提单号${i}}`;
-    replacementData[placeholder] = '';
+  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  const maxContainers = 20; // 假设模板最多支持20个舱单
+  for (let i = 0; i < maxContainers; i++) {
+    const suffix = i + 1;
+    if (i < allCargoData.length) {
+      const cargo = allCargoData[i];
+      replacementData[`{提单号${suffix}}`] = cargo.提单号 || '';
+      replacementData[`{箱号${suffix}}`] = cargo.箱号 || '';
+      replacementData[`{箱型${suffix}}`] = cargo.箱型 || '';
+      replacementData[`{封号${suffix}}`] = cargo.封号 || '';
+      replacementData[`{件数${suffix}}`] = cargo.件数 || '';
+      replacementData[`{毛重${suffix}}`] = cargo.毛重 || '';
+      replacementData[`{体积${suffix}}`] = cargo.体积 || '';
+    } else {
+      // 填充空的占位符
+      replacementData[`{提单号${suffix}}`] = '';
+      replacementData[`{箱号${suffix}}`] = '';
+      replacementData[`{箱型${suffix}}`] = '';
+      replacementData[`{封号${suffix}}`] = '';
+      replacementData[`{件数${suffix}}`] = '';
+      replacementData[`{毛重${suffix}}`] = '';
+      replacementData[`{体积${suffix}}`] = '';
+    }
   }
 
   console.log('总提单OK件（无HS）替换数据:', {
