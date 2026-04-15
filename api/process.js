@@ -549,7 +549,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
           }
         }
       });
-      if (hasEmptyBillNumber) {
+      if (hasEmptyBillNumber && rowNumber !== 22) {
         rowsToDelete.add(rowNumber);
       }
     });
@@ -726,7 +726,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
           }
         }
       });
-      if (hasEmptyBillNumber) {
+      if (hasEmptyBillNumber && rowNumber !== 22) {
         rowsToDelete.add(rowNumber);
       }
     });
