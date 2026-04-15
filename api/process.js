@@ -256,7 +256,7 @@ async function generateExcelDocument(data) {
 }
 
 // 生成并单保函 Word 文档
-async function generateCombinedLetter(data) {
+async function generateCombinedLetter(firstData, allCargoData) {
   const templatePath = path.join(__dirname, '../templates/并单保函的格式.docx');
   const templateBuffer = await fs.readFile(templatePath);
 
@@ -266,8 +266,8 @@ async function generateCombinedLetter(data) {
     linebreaks: true,
   });
 
-  // 商品列表 - 严格按舱单文件中的英文品名数量处理
-  const englishNames = data.英文品名 || '';
+  // 商品列表 - 严格按舱单文件中的英文品名数量处理（使用第一个文件的数据）
+  const englishNames = firstData.英文品名 || '';
   const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
@@ -279,30 +279,46 @@ async function generateCombinedLetter(data) {
     goodsData[`商品${i}`] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
+  // 生成提单号映射：提单号1, 提单号2, ...
+  const billNumberData = {};
+  for (let i = 0; i < allCargoData.length; i++) {
+    const billNumber = allCargoData[i].提单号 || '';
+    billNumberData[`提单号${i + 1}`] = billNumber;
+  }
+
+  // 假设模板最多支持20个提单号，填充空的占位符
+  const maxBillNumbers = 20;
+  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
+    billNumberData[`提单号${i}`] = '';
+  }
+
+  console.log('并单保函提单号数据:', billNumberData);
+
   doc.setData({
-    船名: data.船名,
-    航次: data.航次,
-    目的港: data.目的港,
-    提单号: data.提单号,
-    箱号: data.箱号,
-    封号: data.封号,
-    箱型: data.箱型,
-    件数: data.件数,
-    毛重: data.毛重,
-    体积: data.体积,
-    公司名: data.发货人名称,
-    公司地址: data.发货人地址,
-    电话: data.发货人电话,
+    船名: firstData.船名,
+    航次: firstData.航次,
+    目的港: firstData.目的港,
+    提单号: firstData.提单号,
+    箱号: firstData.箱号,
+    封号: firstData.封号,
+    箱型: firstData.箱型,
+    件数: firstData.件数,
+    毛重: firstData.毛重,
+    体积: firstData.体积,
+    公司名: firstData.发货人名称,
+    公司地址: firstData.发货人地址,
+    电话: firstData.发货人电话,
     传真: '',
     电子邮箱: '',
     许可证号: '',
-    收货地址: data.收货人地址,
+    收货地址: firstData.收货人地址,
     邮编: '',
     手机号: '',
-    电话号码: data.收货人电话,
-    姓名: data.通知人名称,
-    地址: data.通知人地址,
+    电话号码: firstData.收货人电话,
+    姓名: firstData.通知人名称,
+    地址: firstData.通知人地址,
     ...goodsData,
+    ...billNumberData,
   });
 
   doc.render();
@@ -548,16 +564,9 @@ module.exports = async (req, res) => {
 
     console.log(`开始批量处理 ${files.length} 个文件`);
 
-    // 解析第一个文件的数据用于生成汇总文件
+    // 收集所有舱单数据用于生成汇总文件
+    const allCargoData = [];
     let firstCargoData = null;
-    if (files.length > 0) {
-      try {
-        firstCargoData = parseManifestExcel(files[0].buffer);
-        console.log(`第一个文件提单号: ${firstCargoData.提单号}, 将用于生成汇总文件`);
-      } catch (parseError) {
-        console.error('解析第一个文件失败，跳过生成汇总文件:', parseError);
-      }
-    }
 
     // 创建 ZIP 归档
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -579,6 +588,13 @@ module.exports = async (req, res) => {
 
       try {
         const cargoData = parseManifestExcel(file.buffer);
+
+        // 收集数据用于汇总文件
+        allCargoData.push(cargoData);
+        if (i === 0) {
+          firstCargoData = cargoData;
+        }
+
         const wordBuffer = await generateWordDocument(cargoData);
         const excelBuffer = await generateExcelDocument(cargoData);
 
@@ -594,7 +610,8 @@ module.exports = async (req, res) => {
         console.log(`  文件名: B/${safeBillName}.docx, C/${safeContainerName}.xlsx`);
       } catch (fileError) {
         console.error(`处理文件 ${i + 1} 失败:`, fileError);
-        throw new Error(`第 ${i + 1} 个文件处理失败: ${fileError.message}`);
+        // 跳过失败的文件，继续处理其他文件
+        continue;
       }
     }
 
@@ -604,7 +621,7 @@ module.exports = async (req, res) => {
         const safeBillNumber = firstCargoData.提单号 ? firstCargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : '汇总';
 
         // 生成并单保函
-        const combinedLetterBuffer = await generateCombinedLetter(firstCargoData);
+        const combinedLetterBuffer = await generateCombinedLetter(firstCargoData, allCargoData);
         archive.append(combinedLetterBuffer, { name: `A/${safeBillNumber}并单保函的格式.docx` });
         console.log(`生成汇总文件: A/${safeBillNumber}并单保函的格式.docx`);
 
