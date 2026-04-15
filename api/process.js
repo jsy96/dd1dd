@@ -326,7 +326,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
 }
 
 // 生成总提单OK件（带HS）Excel 文档
-async function generateOKBillWithHS(data) {
+async function generateOKBillWithHS(firstData, allCargoData) {
   const templatePath = path.join(__dirname, '../templates/总提单OK件的格式(带HS的.xlsx');
   const templateBuffer = await fs.readFile(templatePath);
 
@@ -370,7 +370,7 @@ async function generateOKBillWithHS(data) {
   };
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
-  const englishNames = data.英文品名 || '';
+  const englishNames = firstData.英文品名 || '';
   const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
@@ -378,25 +378,25 @@ async function generateOKBillWithHS(data) {
   }
   const replacementData = {
     '{发票日期}': formattedDate,
-    '{船名}': data.船名 || '',
-    '{航次}': data.航次 || '',
-    '{目的港}': data.目的港 || '',
-    '{提单号}': data.提单号 || '',
-    '{箱号}': data.箱号 || '',
-    '{封号}': data.封号 || '',
-    '{箱型}': data.箱型 || '',
-    '{件数}': data.件数 || '',
-    '{毛重}': data.毛重 || '',
-    '{体积}': data.体积 || '',
-    '{发货人名称}': data.发货人名称 || '',
-    '{发货人地址}': data.发货人地址 || '',
-    '{发货人电话}': data.发货人电话 || '',
-    '{收货人名称}': data.收货人名称 || '',
-    '{收货人地址}': data.收货人地址 || '',
-    '{收货人电话}': data.收货人电话 || '',
-    '{通知人名称}': data.通知人名称 || '',
-    '{通知人地址}': data.通知人地址 || '',
-    '{通知人电话}': data.通知人电话 || '',
+    '{船名}': firstData.船名 || '',
+    '{航次}': firstData.航次 || '',
+    '{目的港}': firstData.目的港 || '',
+    '{提单号}': firstData.提单号 || '',
+    '{箱号}': firstData.箱号 || '',
+    '{封号}': firstData.封号 || '',
+    '{箱型}': firstData.箱型 || '',
+    '{件数}': firstData.件数 || '',
+    '{毛重}': firstData.毛重 || '',
+    '{体积}': firstData.体积 || '',
+    '{发货人名称}': firstData.发货人名称 || '',
+    '{发货人地址}': firstData.发货人地址 || '',
+    '{发货人电话}': firstData.发货人电话 || '',
+    '{收货人名称}': firstData.收货人名称 || '',
+    '{收货人地址}': firstData.收货人地址 || '',
+    '{收货人电话}': firstData.收货人电话 || '',
+    '{通知人名称}': firstData.通知人名称 || '',
+    '{通知人地址}': firstData.通知人地址 || '',
+    '{通知人电话}': firstData.通知人电话 || '',
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
@@ -405,10 +405,26 @@ async function generateOKBillWithHS(data) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
+  // 添加提单号映射：提单号1, 提单号2, ...
+  for (let i = 0; i < allCargoData.length; i++) {
+    const billNumber = allCargoData[i].提单号 || '';
+    const placeholder = `{提单号${i + 1}}`;
+    replacementData[placeholder] = billNumber;
+  }
+
+  // 假设模板最多支持20个提单号，填充空的占位符
+  const maxBillNumbers = 20;
+  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
+    const placeholder = `{提单号${i}}`;
+    replacementData[placeholder] = '';
+  }
+
   console.log('总提单OK件（带HS）替换数据:', {
-    提单号: data.提单号,
+    提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
+    提单号总数: allCargoData.length,
+    所有提单号: allCargoData.map(d => d.提单号),
   });
 
   // 处理所有 sheet
@@ -430,7 +446,7 @@ async function generateOKBillWithHS(data) {
 }
 
 // 生成总提单OK件（无HS）Excel 文档
-async function generateOKBillWithoutHS(data) {
+async function generateOKBillWithoutHS(firstData, allCargoData) {
   const templatePath = path.join(__dirname, '../templates/总提单OK件的格式(无HS的.xlsx');
   const templateBuffer = await fs.readFile(templatePath);
 
@@ -474,7 +490,7 @@ async function generateOKBillWithoutHS(data) {
   };
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
-  const englishNames = data.英文品名 || '';
+  const englishNames = firstData.英文品名 || '';
   const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
@@ -482,25 +498,25 @@ async function generateOKBillWithoutHS(data) {
   }
   const replacementData = {
     '{发票日期}': formattedDate,
-    '{船名}': data.船名 || '',
-    '{航次}': data.航次 || '',
-    '{目的港}': data.目的港 || '',
-    '{提单号}': data.提单号 || '',
-    '{箱号}': data.箱号 || '',
-    '{封号}': data.封号 || '',
-    '{箱型}': data.箱型 || '',
-    '{件数}': data.件数 || '',
-    '{毛重}': data.毛重 || '',
-    '{体积}': data.体积 || '',
-    '{发货人名称}': data.发货人名称 || '',
-    '{发货人地址}': data.发货人地址 || '',
-    '{发货人电话}': data.发货人电话 || '',
-    '{收货人名称}': data.收货人名称 || '',
-    '{收货人地址}': data.收货人地址 || '',
-    '{收货人电话}': data.收货人电话 || '',
-    '{通知人名称}': data.通知人名称 || '',
-    '{通知人地址}': data.通知人地址 || '',
-    '{通知人电话}': data.通知人电话 || '',
+    '{船名}': firstData.船名 || '',
+    '{航次}': firstData.航次 || '',
+    '{目的港}': firstData.目的港 || '',
+    '{提单号}': firstData.提单号 || '',
+    '{箱号}': firstData.箱号 || '',
+    '{封号}': firstData.封号 || '',
+    '{箱型}': firstData.箱型 || '',
+    '{件数}': firstData.件数 || '',
+    '{毛重}': firstData.毛重 || '',
+    '{体积}': firstData.体积 || '',
+    '{发货人名称}': firstData.发货人名称 || '',
+    '{发货人地址}': firstData.发货人地址 || '',
+    '{发货人电话}': firstData.发货人电话 || '',
+    '{收货人名称}': firstData.收货人名称 || '',
+    '{收货人地址}': firstData.收货人地址 || '',
+    '{收货人电话}': firstData.收货人电话 || '',
+    '{通知人名称}': firstData.通知人名称 || '',
+    '{通知人地址}': firstData.通知人地址 || '',
+    '{通知人电话}': firstData.通知人电话 || '',
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
@@ -509,10 +525,26 @@ async function generateOKBillWithoutHS(data) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
+  // 添加提单号映射：提单号1, 提单号2, ...
+  for (let i = 0; i < allCargoData.length; i++) {
+    const billNumber = allCargoData[i].提单号 || '';
+    const placeholder = `{提单号${i + 1}}`;
+    replacementData[placeholder] = billNumber;
+  }
+
+  // 假设模板最多支持20个提单号，填充空的占位符
+  const maxBillNumbers = 20;
+  for (let i = allCargoData.length + 1; i <= maxBillNumbers; i++) {
+    const placeholder = `{提单号${i}}`;
+    replacementData[placeholder] = '';
+  }
+
   console.log('总提单OK件（无HS）替换数据:', {
-    提单号: data.提单号,
+    提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
+    提单号总数: allCargoData.length,
+    所有提单号: allCargoData.map(d => d.提单号),
   });
 
   // 处理所有 sheet
@@ -626,12 +658,12 @@ module.exports = async (req, res) => {
         console.log(`生成汇总文件: A/${safeBillNumber}并单保函的格式.docx`);
 
         // 生成总提单OK件（带HS）
-        const okWithHSBuffer = await generateOKBillWithHS(firstCargoData);
+        const okWithHSBuffer = await generateOKBillWithHS(firstCargoData, allCargoData);
         archive.append(okWithHSBuffer, { name: `A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx` });
         console.log(`生成汇总文件: A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx`);
 
         // 生成总提单OK件（无HS）
-        const okWithoutHSBuffer = await generateOKBillWithoutHS(firstCargoData);
+        const okWithoutHSBuffer = await generateOKBillWithoutHS(firstCargoData, allCargoData);
         archive.append(okWithoutHSBuffer, { name: `A/${safeBillNumber}总提单OK件的格式(无HS的.xlsx` });
         console.log(`生成汇总文件: A/${safeBillNumber}总提单OK件的格式(无HS的.xlsx`);
       } catch (summaryError) {
