@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const os = require('os');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const PizZip = require('pizzip');
@@ -14,9 +15,17 @@ const PORT = process.env.PORT || 5000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// 临时目录（兼容 Windows 和 Unix）
+const tmpDir = path.join(os.tmpdir(), 'manifest-uploads');
+const outputDir = path.join(os.tmpdir(), 'manifest-output');
+
+// 确保临时目录存在
+fs.mkdir(tmpDir, { recursive: true }).catch(() => {});
+fs.mkdir(outputDir, { recursive: true }).catch(() => {});
+
 // 配置文件上传
-const upload = multer({ 
-  dest: '/tmp/uploads/',
+const upload = multer({
+  dest: tmpDir,
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB 限制
 });
 
@@ -97,6 +106,10 @@ function parseManifestExcel(buffer) {
     `TEL: ${data.通知人电话}`
   ].filter(Boolean).join('\n');
 
+  // 调试日志
+  console.log('DEBUG parseManifestExcel: 英文品名原始值:', JSON.stringify(data.英文品名));
+  console.log('DEBUG parseManifestExcel: 解析后商品列表长度:', data.英文品名 ? data.英文品名.split(',').map(s => s.trim()).filter(item => item !== '').length : 0);
+
   return data;
 }
 
@@ -111,12 +124,23 @@ async function generateWordDocument(data) {
     linebreaks: true,
   });
 
-  // 商品列表
-  const goodsList = data.英文品名.split(',').map(s => s.trim()).filter(Boolean);
+  // 商品列表 - 严格按舱单文件中的英文品名数量处理
+  const englishNames = data.英文品名 || '';
+  const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  // 确保商品数量不超过22个，如果超过则截断并记录警告
+  if (goodsList.length > 22) {
+    console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
+  }
   const goodsData = {};
   for (let i = 1; i <= 22; i++) {
-    goodsData[`商品${i}`] = goodsList[i - 1] || '';
+    // 只使用舱单文件中存在的商品，不存在则设置为空字符串
+    goodsData[`商品${i}`] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
+
+  // 调试日志
+  console.log('DEBUG Word生成: 英文品名原始值:', JSON.stringify(data.英文品名));
+  console.log('DEBUG Word生成: 解析后商品列表:', JSON.stringify(goodsList));
+  console.log('DEBUG Word生成: 商品数据:', JSON.stringify(goodsData));
 
   doc.setData({
     船名: data.船名,
@@ -205,20 +229,27 @@ async function generateExcelDocument(data) {
     });
   });
 
-  // 填充商品列表
-  const goodsList = data.英文品名.split(',').map(s => s.trim()).filter(Boolean);
+  // 填充商品列表 - 严格按舱单文件中的英文品名数量处理
+  const englishNames = data.英文品名 || '';
+  const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  // 确保商品数量不超过22个，如果超过则截断并记录警告
+  if (goodsList.length > 22) {
+    console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
+  }
   for (let i = 0; i < 22; i++) {
     const rowNum = 12 + i;
     const row = worksheet.getRow(rowNum);
     const cell = row.getCell(5);
     const placeholder = `{商品${i + 1}}`;
-    
-    if (i < goodsList.length) {
-      replacePlaceholder(cell, placeholder, goodsList[i]);
-    } else {
-      replacePlaceholder(cell, placeholder, '');
-    }
+
+    // 只使用舱单文件中存在的商品，不存在则设置为空字符串
+    const goodsValue = i < goodsList.length ? goodsList[i] : '';
+    replacePlaceholder(cell, placeholder, goodsValue);
   }
+
+  // 调试日志
+  console.log('DEBUG Excel生成: 英文品名原始值:', JSON.stringify(data.英文品名));
+  console.log('DEBUG Excel生成: 解析后商品列表:', JSON.stringify(goodsList));
 
   return workbook.xlsx.writeBuffer();
 }
@@ -242,11 +273,11 @@ app.post('/api/process', upload.single('manifest'), async (req, res) => {
 
     // 保存文件
     const timestamp = Date.now();
-    const wordFileName = `提单确认件_${timestamp}.docx`;
-    const excelFileName = `装箱单发票_${timestamp}.xlsx`;
+    const wordFileName = `提单确认件_${timestamp}.doc`;
+    const excelFileName = `装箱单发票_${timestamp}.xls`;
     
-    const wordFilePath = path.join('/tmp', wordFileName);
-    const excelFilePath = path.join('/tmp', excelFileName);
+    const wordFilePath = path.join(outputDir, wordFileName);
+    const excelFilePath = path.join(outputDir, excelFileName);
 
     await fs.writeFile(wordFilePath, wordBuffer);
     await fs.writeFile(excelFilePath, excelBuffer);
@@ -282,11 +313,11 @@ app.post('/api/regenerate', async (req, res) => {
 
     // 保存文件
     const timestamp = Date.now();
-    const wordFileName = `提单确认件_${timestamp}.docx`;
-    const excelFileName = `装箱单发票_${timestamp}.xlsx`;
+    const wordFileName = `提单确认件_${timestamp}.doc`;
+    const excelFileName = `装箱单发票_${timestamp}.xls`;
     
-    const wordFilePath = path.join('/tmp', wordFileName);
-    const excelFilePath = path.join('/tmp', excelFileName);
+    const wordFilePath = path.join(outputDir, wordFileName);
+    const excelFilePath = path.join(outputDir, excelFileName);
 
     await fs.writeFile(wordFilePath, wordBuffer);
     await fs.writeFile(excelFilePath, excelBuffer);
@@ -311,16 +342,40 @@ app.get('/api/download', async (req, res) => {
       return res.status(400).json({ success: false, message: '缺少文件名' });
     }
 
-    const filePath = path.join('/tmp', filename);
-    
+    const filePath = path.join(outputDir, filename);
+
     // 检查文件是否存在
     try {
       await fs.access(filePath);
     } catch {
+      console.error('文件不存在:', filePath);
       return res.status(404).json({ success: false, message: '文件不存在' });
     }
 
-    res.download(filePath, filename);
+    // 读取文件
+    const fileBuffer = await fs.readFile(filePath);
+
+    // 根据文件扩展名设置 MIME 类型
+    const ext = path.extname(filename).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.doc' || ext === '.docx') {
+      contentType = 'application/msword';
+    } else if (ext === '.xls' || ext === '.xlsx') {
+      contentType = 'application/vnd.ms-excel';
+    }
+
+    // 设置响应头（兼容手机浏览器）
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', fileBuffer.length);
+
+    // Content-Disposition 支持 UTF-8 文件名 (RFC 5987)
+    const encodedFileName = encodeURIComponent(filename);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodedFileName}`);
+
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    res.send(fileBuffer);
   } catch (error) {
     console.error('下载文件失败:', error);
     res.status(500).json({ success: false, message: '下载文件失败' });

@@ -1,5 +1,3 @@
-.next
-
 # Dependencies
 node_modules/
 .pnp
@@ -9,13 +7,6 @@ node_modules/
 dist/
 build/
 out/
-.next/
-.rsbuild/
-
-# Testing
-coverage/
-*.lcov
-.nyc_output
 
 # Environment variables
 .env
@@ -31,7 +22,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
 # Runtime data
 pids
@@ -39,20 +29,11 @@ pids
 *.seed
 *.pid.lock
 
-# Diagnostic reports
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-
 # Cache
 .cache/
 .parcel-cache/
 .eslintcache
 .stylelintcache
-.npm
-.yarn/cache
-.yarn/unplugged
-.yarn/build-state.yml
-.yarn/install-state.gz
-node-compile-cache/
 
 # Editor directories and files
 .vscode/*
@@ -61,8 +42,7 @@ node-compile-cache/
 .idea/
 *.suo
 *.ntvs*
-*.njsproj
-*.sln
+*.*.sln
 *.sw?
 *.swp
 *.swo
@@ -81,7 +61,7 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
-.tmp/
+/tmp/
 .temp/
 
 # Optional files
@@ -93,11 +73,10 @@ Desktop.ini
 # TypeScript
 *.tsbuildinfo
 
-# Misc
-.vercel
-.turbo
-
-.coze-logs
-
 # Claude AI configuration
 .claude/
+
+# Coze
+.coze-logs
+.coze
+.cozeproj
