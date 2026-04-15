@@ -181,16 +181,27 @@ async function generateExcelDocument(data) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      let font = {};
-      if (cell.value?.richText && cell.value.richText.length > 0) {
-        font = cell.value.richText[0].font || {};
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+        // 设置为数字类型
+        cell.value = Number(replacement);
+        // 设置数字格式为整数（无小数）
+        cell.numFmt = '0';
+        // 设置单元格类型为数字
+        cell.type = 'n';
+      } else {
+        // 非数字值，保持原有格式
+        let font = {};
+        if (cell.value?.richText && cell.value.richText.length > 0) {
+          font = cell.value.richText[0].font || {};
+        }
+        cell.value = {
+          richText: [{
+            font: font,
+            text: replacement || ''
+          }]
+        };
       }
-      cell.value = {
-        richText: [{
-          font: font,
-          text: replacement
-        }]
-      };
       return true;
     }
     return false;
@@ -392,16 +403,27 @@ async function generateOKBillWithHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      let font = {};
-      if (cell.value?.richText && cell.value.richText.length > 0) {
-        font = cell.value.richText[0].font || {};
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+        // 设置为数字类型
+        cell.value = Number(replacement);
+        // 设置数字格式为整数（无小数）
+        cell.numFmt = '0';
+        // 设置单元格类型为数字
+        cell.type = 'n';
+      } else {
+        // 非数字值，保持原有格式
+        let font = {};
+        if (cell.value?.richText && cell.value.richText.length > 0) {
+          font = cell.value.richText[0].font || {};
+        }
+        cell.value = {
+          richText: [{
+            font: font,
+            text: replacement || ''
+          }]
+        };
       }
-      cell.value = {
-        richText: [{
-          font: font,
-          text: replacement
-        }]
-      };
       return true;
     }
     return false;
@@ -523,16 +545,27 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      let font = {};
-      if (cell.value?.richText && cell.value.richText.length > 0) {
-        font = cell.value.richText[0].font || {};
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+        // 设置为数字类型
+        cell.value = Number(replacement);
+        // 设置数字格式为整数（无小数）
+        cell.numFmt = '0';
+        // 设置单元格类型为数字
+        cell.type = 'n';
+      } else {
+        // 非数字值，保持原有格式
+        let font = {};
+        if (cell.value?.richText && cell.value.richText.length > 0) {
+          font = cell.value.richText[0].font || {};
+        }
+        cell.value = {
+          richText: [{
+            font: font,
+            text: replacement || ''
+          }]
+        };
       }
-      cell.value = {
-        richText: [{
-          font: font,
-          text: replacement
-        }]
-      };
       return true;
     }
     return false;
