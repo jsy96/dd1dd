@@ -291,6 +291,9 @@ async function generateCombinedLetter(firstData, allCargoData) {
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
+    nullGetter: function() {
+      return '';
+    }
   });
 
   // 商品列表 - 严格按舱单文件中的英文品名数量处理（使用第一个文件的数据）
@@ -314,22 +317,46 @@ async function generateCombinedLetter(firstData, allCargoData) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
       const cargo = allCargoData[i];
-      containerData[`提单号${suffix}`] = cargo.提单号 || '';
-      containerData[`箱号${suffix}`] = cargo.箱号 || '';
-      containerData[`箱型${suffix}`] = cargo.箱型 || '';
-      containerData[`封号${suffix}`] = cargo.封号 || '';
-      containerData[`件数${suffix}`] = safeToInt(cargo.件数);
-      containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
-      containerData[`体积${suffix}`] = safeToInt(cargo.体积);
+      const billNumber = cargo.提单号 || '';
+      // 对于提单号2及以上，如果提单号为空，设置字段为null（让模板处理空行）
+      if (suffix >= 2 && billNumber === '') {
+        containerData[`提单号${suffix}`] = null;
+        containerData[`箱号${suffix}`] = null;
+        containerData[`箱型${suffix}`] = null;
+        containerData[`封号${suffix}`] = null;
+        containerData[`件数${suffix}`] = null;
+        containerData[`毛重${suffix}`] = null;
+        containerData[`体积${suffix}`] = null;
+      } else {
+        containerData[`提单号${suffix}`] = billNumber;
+        containerData[`箱号${suffix}`] = cargo.箱号 || '';
+        containerData[`箱型${suffix}`] = cargo.箱型 || '';
+        containerData[`封号${suffix}`] = cargo.封号 || '';
+        containerData[`件数${suffix}`] = safeToInt(cargo.件数);
+        containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
+        containerData[`体积${suffix}`] = safeToInt(cargo.体积);
+      }
     } else {
-      // 填充空的占位符
-      containerData[`提单号${suffix}`] = '';
-      containerData[`箱号${suffix}`] = '';
-      containerData[`箱型${suffix}`] = '';
-      containerData[`封号${suffix}`] = '';
-      containerData[`件数${suffix}`] = '';
-      containerData[`毛重${suffix}`] = '';
-      containerData[`体积${suffix}`] = '';
+      // 没有更多舱单数据
+      if (suffix >= 2) {
+        // 对于提单号2及以上，设置字段为null（让模板处理空行）
+        containerData[`提单号${suffix}`] = null;
+        containerData[`箱号${suffix}`] = null;
+        containerData[`箱型${suffix}`] = null;
+        containerData[`封号${suffix}`] = null;
+        containerData[`件数${suffix}`] = null;
+        containerData[`毛重${suffix}`] = null;
+        containerData[`体积${suffix}`] = null;
+      } else {
+        // 提单号1，设置空字符串
+        containerData[`提单号${suffix}`] = '';
+        containerData[`箱号${suffix}`] = '';
+        containerData[`箱型${suffix}`] = '';
+        containerData[`封号${suffix}`] = '';
+        containerData[`件数${suffix}`] = '';
+        containerData[`毛重${suffix}`] = '';
+        containerData[`体积${suffix}`] = '';
+      }
     }
   }
 
@@ -501,6 +528,33 @@ async function generateOKBillWithHS(firstData, allCargoData) {
   // 处理所有 sheet
   workbook.worksheets.forEach((worksheet, sheetIndex) => {
     let replacedCount = 0;
+    const rowsToDelete = new Set();
+
+    // 第一遍：扫描并标记需要删除的行
+    worksheet.eachRow((row, rowNumber) => {
+      let hasEmptyBillNumber = false;
+      row.eachCell((cell) => {
+        const cellText = getCellText(cell);
+        // 检查是否包含提单号占位符，且不是提单号1
+        const billMatch = cellText.match(/\{提单号(\d+)\}/);
+        if (billMatch) {
+          const billNum = parseInt(billMatch[1], 10);
+          if (billNum >= 2) {
+            const placeholder = billMatch[0];
+            const replacement = replacementData[placeholder];
+            // 如果替换值为空，标记该行删除
+            if (replacement === '') {
+              hasEmptyBillNumber = true;
+            }
+          }
+        }
+      });
+      if (hasEmptyBillNumber) {
+        rowsToDelete.add(rowNumber);
+      }
+    });
+
+    // 第二遍：替换占位符
     worksheet.eachRow((row, rowNumber) => {
       row.eachCell((cell) => {
         for (const [placeholder, replacement] of Object.entries(replacementData)) {
@@ -510,7 +564,15 @@ async function generateOKBillWithHS(firstData, allCargoData) {
         }
       });
     });
-    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符`);
+
+    // 删除标记的行（从后往前删除，避免行号变化）
+    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
+    sortedRows.forEach(rowNumber => {
+      worksheet.spliceRows(rowNumber, 1);
+      console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
+    });
+
+    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -643,6 +705,33 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   // 处理所有 sheet
   workbook.worksheets.forEach((worksheet, sheetIndex) => {
     let replacedCount = 0;
+    const rowsToDelete = new Set();
+
+    // 第一遍：扫描并标记需要删除的行
+    worksheet.eachRow((row, rowNumber) => {
+      let hasEmptyBillNumber = false;
+      row.eachCell((cell) => {
+        const cellText = getCellText(cell);
+        // 检查是否包含提单号占位符，且不是提单号1
+        const billMatch = cellText.match(/\{提单号(\d+)\}/);
+        if (billMatch) {
+          const billNum = parseInt(billMatch[1], 10);
+          if (billNum >= 2) {
+            const placeholder = billMatch[0];
+            const replacement = replacementData[placeholder];
+            // 如果替换值为空，标记该行删除
+            if (replacement === '') {
+              hasEmptyBillNumber = true;
+            }
+          }
+        }
+      });
+      if (hasEmptyBillNumber) {
+        rowsToDelete.add(rowNumber);
+      }
+    });
+
+    // 第二遍：替换占位符
     worksheet.eachRow((row, rowNumber) => {
       row.eachCell((cell) => {
         for (const [placeholder, replacement] of Object.entries(replacementData)) {
@@ -652,7 +741,15 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
         }
       });
     });
-    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符`);
+
+    // 删除标记的行（从后往前删除，避免行号变化）
+    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
+    sortedRows.forEach(rowNumber => {
+      worksheet.spliceRows(rowNumber, 1);
+      console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
+    });
+
+    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
