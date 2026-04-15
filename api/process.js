@@ -94,6 +94,89 @@ function safeToInt(value) {
   return '';
 }
 
+// 更新求和公式（数据行范围：15-21行，求和行：第22行）
+function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
+  // 计算在数据行范围（15-21）内删除了多少行
+  const dataRowStart = 15;
+  const dataRowEnd = 21;
+  const originalSumRow = 22; // 原始求和公式所在行
+
+  // 统计在数据行范围内删除了多少行
+  let deletedInDataRange = 0;
+  // 统计在求和行之前删除了多少行（行号小于originalSumRow）
+  let deletedBeforeSum = 0;
+
+  deletedRows.forEach(rowNum => {
+    if (rowNum >= dataRowStart && rowNum <= dataRowEnd) {
+      deletedInDataRange++;
+    }
+    if (rowNum < originalSumRow) {
+      deletedBeforeSum++;
+    }
+  });
+
+  if (deletedInDataRange === 0) {
+    // 没有在数据行范围内删除行，无需更新公式
+    return;
+  }
+
+  // 计算新的结束行
+  const newDataRowEnd = dataRowEnd - deletedInDataRange;
+  // 计算新的求和行号（原始行号减去之前删除的行数）
+  const newSumRow = originalSumRow - deletedBeforeSum;
+
+  // 更新求和公式
+  // 公式列：C列、E列、G列
+  const formulaColumns = ['C', 'E', 'G'];
+
+  formulaColumns.forEach(col => {
+    const originalCellAddress = `${col}${originalSumRow}`;
+    const newCellAddress = `${col}${newSumRow}`;
+    const cell = worksheet.getCell(newCellAddress);
+
+    // 如果新单元格没有公式，尝试查找包含公式的单元格
+    if (!cell.formula) {
+      // 可能公式在其他行，尝试搜索
+      console.log(`单元格${newCellAddress}没有公式，尝试查找公式...`);
+      // 简单起见，我们假设公式就在新行
+      return;
+    }
+
+    // 解析原始公式，更新引用范围
+    const originalFormula = cell.formula;
+    // 预期公式格式：SUM(C15:C21)
+    const regex = new RegExp(`SUM\\(${col}(\\d+):${col}(\\d+)\\)`, 'i');
+    const match = originalFormula.match(regex);
+
+    if (match) {
+      const startRow = parseInt(match[1], 10);
+      const endRow = parseInt(match[2], 10);
+
+      // 检查公式是否符合预期格式
+      if (startRow === dataRowStart && endRow === dataRowEnd) {
+        // 更新公式
+        const newFormula = `SUM(${col}${dataRowStart}:${col}${newDataRowEnd})`;
+        cell.value = {
+          formula: newFormula,
+          result: null // 清除缓存结果，让Excel重新计算
+        };
+        console.log(`更新公式：${newCellAddress} = ${newFormula}（原公式：${originalFormula}，删除了${deletedInDataRange}行，求和行从${originalSumRow}移动到${newSumRow}）`);
+      } else {
+        // 公式格式不匹配，但可能已经被调整过，尝试更新为新的结束行
+        // 保持起始行不变，更新结束行
+        const newFormula = `SUM(${col}${startRow}:${col}${newDataRowEnd})`;
+        cell.value = {
+          formula: newFormula,
+          result: null
+        };
+        console.log(`更新公式（调整）：${newCellAddress} = ${newFormula}（原公式：${originalFormula}，删除了${deletedInDataRange}行）`);
+      }
+    } else {
+      console.log(`无法解析公式：${newCellAddress} = ${originalFormula}`);
+    }
+  });
+}
+
 // 生成 Word 文档
 async function generateWordDocument(data) {
   const templatePath = path.join(__dirname, '../templates/提单确认件的格式.docx');
@@ -533,7 +616,14 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     // 第一遍：扫描并标记需要删除的行
     worksheet.eachRow((row, rowNumber) => {
       let hasEmptyBillNumber = false;
+      let hasFormula = false;
+
       row.eachCell((cell) => {
+        // 检查单元格是否包含公式
+        if (cell.formula) {
+          hasFormula = true;
+        }
+
         const cellText = getCellText(cell);
         // 检查是否包含提单号占位符，且不是提单号1
         const billMatch = cellText.match(/\{提单号(\d+)\}/);
@@ -549,7 +639,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
           }
         }
       });
-      if (hasEmptyBillNumber && rowNumber !== 22) {
+
+      // 如果行包含公式或行号是22，不标记删除
+      if (hasEmptyBillNumber && !hasFormula && rowNumber !== 22) {
         rowsToDelete.add(rowNumber);
       }
     });
@@ -571,6 +663,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       worksheet.spliceRows(rowNumber, 1);
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
     });
+
+    // 更新第22行的求和公式（数据行范围：15-21行）
+    updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
   });
@@ -710,7 +805,14 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     // 第一遍：扫描并标记需要删除的行
     worksheet.eachRow((row, rowNumber) => {
       let hasEmptyBillNumber = false;
+      let hasFormula = false;
+
       row.eachCell((cell) => {
+        // 检查单元格是否包含公式
+        if (cell.formula) {
+          hasFormula = true;
+        }
+
         const cellText = getCellText(cell);
         // 检查是否包含提单号占位符，且不是提单号1
         const billMatch = cellText.match(/\{提单号(\d+)\}/);
@@ -726,7 +828,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
           }
         }
       });
-      if (hasEmptyBillNumber && rowNumber !== 22) {
+
+      // 如果行包含公式或行号是22，不标记删除
+      if (hasEmptyBillNumber && !hasFormula && rowNumber !== 22) {
         rowsToDelete.add(rowNumber);
       }
     });
@@ -748,6 +852,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       worksheet.spliceRows(rowNumber, 1);
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
     });
+
+    // 更新第22行的求和公式（数据行范围：15-21行）
+    updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
   });
