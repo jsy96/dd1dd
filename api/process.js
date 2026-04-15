@@ -657,17 +657,23 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       });
     });
 
-    // 删除标记的行（从后往前删除，避免行号变化）
-    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
-    sortedRows.forEach(rowNumber => {
-      worksheet.spliceRows(rowNumber, 1);
-      console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
+    // 清空标记的行（不删除行，只将整行单元格设置为空）
+    rowsToDelete.forEach(rowNumber => {
+      const row = worksheet.getRow(rowNumber);
+      row.eachCell(cell => {
+        cell.value = null;
+        cell.formula = null;
+        cell.numFmt = null;
+        cell.type = null;
+      });
+      console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
     // 更新第22行的求和公式（数据行范围：15-21行）
-    updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
+    // 注意：现在不删除行，只清空行内容，因此不需要更新公式
+    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
-    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
+    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -846,17 +852,23 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       });
     });
 
-    // 删除标记的行（从后往前删除，避免行号变化）
-    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
-    sortedRows.forEach(rowNumber => {
-      worksheet.spliceRows(rowNumber, 1);
-      console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 删除第 ${rowNumber} 行（提单号为空）`);
+    // 清空标记的行（不删除行，只将整行单元格设置为空）
+    rowsToDelete.forEach(rowNumber => {
+      const row = worksheet.getRow(rowNumber);
+      row.eachCell(cell => {
+        cell.value = null;
+        cell.formula = null;
+        cell.numFmt = null;
+        cell.type = null;
+      });
+      console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
     // 更新第22行的求和公式（数据行范围：15-21行）
-    updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
+    // 注意：现在不删除行，只清空行内容，因此不需要更新公式
+    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
-    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，删除了 ${rowsToDelete.size} 行`);
+    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
