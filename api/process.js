@@ -401,15 +401,15 @@ async function generateCombinedLetter(firstData, allCargoData) {
     if (i < allCargoData.length) {
       const cargo = allCargoData[i];
       const billNumber = cargo.提单号 || '';
-      // 对于提单号2及以上，如果提单号为空，设置字段为null（让模板处理空行）
+      // 对于提单号2及以上，如果提单号为空，设置字段为空字符串（清空整行）
       if (suffix >= 2 && billNumber === '') {
-        containerData[`提单号${suffix}`] = null;
-        containerData[`箱号${suffix}`] = null;
-        containerData[`箱型${suffix}`] = null;
-        containerData[`封号${suffix}`] = null;
-        containerData[`件数${suffix}`] = null;
-        containerData[`毛重${suffix}`] = null;
-        containerData[`体积${suffix}`] = null;
+        containerData[`提单号${suffix}`] = '';
+        containerData[`箱号${suffix}`] = '';
+        containerData[`箱型${suffix}`] = '';
+        containerData[`封号${suffix}`] = '';
+        containerData[`件数${suffix}`] = '';
+        containerData[`毛重${suffix}`] = '';
+        containerData[`体积${suffix}`] = '';
       } else {
         containerData[`提单号${suffix}`] = billNumber;
         containerData[`箱号${suffix}`] = cargo.箱号 || '';
@@ -422,14 +422,14 @@ async function generateCombinedLetter(firstData, allCargoData) {
     } else {
       // 没有更多舱单数据
       if (suffix >= 2) {
-        // 对于提单号2及以上，设置字段为null（让模板处理空行）
-        containerData[`提单号${suffix}`] = null;
-        containerData[`箱号${suffix}`] = null;
-        containerData[`箱型${suffix}`] = null;
-        containerData[`封号${suffix}`] = null;
-        containerData[`件数${suffix}`] = null;
-        containerData[`毛重${suffix}`] = null;
-        containerData[`体积${suffix}`] = null;
+        // 对于提单号2及以上，设置字段为空字符串（清空整行）
+        containerData[`提单号${suffix}`] = '';
+        containerData[`箱号${suffix}`] = '';
+        containerData[`箱型${suffix}`] = '';
+        containerData[`封号${suffix}`] = '';
+        containerData[`件数${suffix}`] = '';
+        containerData[`毛重${suffix}`] = '';
+        containerData[`体积${suffix}`] = '';
       } else {
         // 提单号1，设置空字符串
         containerData[`提单号${suffix}`] = '';
