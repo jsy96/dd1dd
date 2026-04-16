@@ -351,7 +351,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
     goodsData[`商品${i}`] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 生成所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  // 生成所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const containerData = {};
   const maxContainers = 20; // 假设模板最多支持20个舱单
 
@@ -369,6 +369,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`件数${suffix}`] = '';
         containerData[`毛重${suffix}`] = '';
         containerData[`体积${suffix}`] = '';
+        containerData[`并单号${suffix}`] = ''; // 清空并单号字段
       } else {
         containerData[`提单号${suffix}`] = billNumber;
         containerData[`箱号${suffix}`] = cargo.箱号 || '';
@@ -377,6 +378,8 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`件数${suffix}`] = safeToInt(cargo.件数);
         containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
         containerData[`体积${suffix}`] = safeToInt(cargo.体积);
+        // 所有并单号字段的值都等于第一个舱单的提单号
+        containerData[`并单号${suffix}`] = firstData.提单号 || '';
       }
     } else {
       // 没有更多舱单数据
@@ -389,6 +392,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`件数${suffix}`] = '';
         containerData[`毛重${suffix}`] = '';
         containerData[`体积${suffix}`] = '';
+        containerData[`并单号${suffix}`] = ''; // 清空并单号字段
       } else {
         // 提单号1，设置空字符串
         containerData[`提单号${suffix}`] = '';
@@ -398,6 +402,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`件数${suffix}`] = '';
         containerData[`毛重${suffix}`] = '';
         containerData[`体积${suffix}`] = '';
+        containerData[`并单号${suffix}`] = ''; // 清空并单号字段
       }
     }
   }
@@ -515,7 +520,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
@@ -528,6 +533,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{件数${suffix}}`] = safeToInt(cargo.件数);
       replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
+      // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
+      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -537,6 +544,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{件数${suffix}}`] = '';
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
+      replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
     }
   }
 
@@ -702,7 +710,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     replacementData[placeholder] = i <= goodsList.length ? goodsList[i - 1] : '';
   }
 
-  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, ...
+  // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
@@ -715,6 +723,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{件数${suffix}}`] = safeToInt(cargo.件数);
       replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
+      // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
+      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -724,6 +734,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{件数${suffix}}`] = '';
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
+      replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
     }
   }
 
