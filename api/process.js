@@ -1272,3 +1272,5 @@ module.exports.generateExcelDocument = generateExcelDocument;
 module.exports.generateCombinedLetter = generateCombinedLetter;
 module.exports.generateOKBillWithHS = generateOKBillWithHS;
 module.exports.generateOKBillWithoutHS = generateOKBillWithoutHS;
+module.exports.bufferToBase64 = bufferToBase64;
+module.exports.parseFormData = parseFormData;

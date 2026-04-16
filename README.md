@@ -235,3 +235,46 @@ yarn add
 
 ### 详细部署指南
 参见 [README_VERCEL.md](README_VERCEL.md) 文件。
+
+## 本地开发与测试
+
+### 常见问题解决
+
+#### 1. Tailwind CSS 警告
+已修复：使用稳定的 unpkg Tailwind CSS 版本替代开发 CDN。
+
+#### 2. API 404 错误
+不要在浏览器中直接打开 `index.html` 文件。请使用本地开发服务器：
+
+```bash
+# 安装依赖
+npm install
+
+# 复制环境变量示例文件
+cp .env.example .env
+# 编辑 .env 文件，填入飞书应用凭证
+
+# 启动本地开发服务器
+npm run dev
+
+# 访问 http://localhost:3000
+```
+
+#### 3. JSON 解析错误
+如果遇到 "Unexpected token" JSON 解析错误：
+1. 确保使用本地开发服务器（端口 3000）
+2. 检查浏览器控制台网络标签，确认 API 返回 JSON 而非 HTML
+3. 验证飞书应用环境变量设置正确
+
+### 本地开发服务器
+项目包含 `dev-server.js` 文件，提供完整的本地测试环境：
+- 静态文件服务（前端界面）
+- API 端点 `/api/process`（处理舱单文件）
+- 健康检查 `/api/health`
+- 模板文件调试 `/api/templates`
+
+### 测试流程
+1. 启动开发服务器：`npm run dev`
+2. 访问 http://localhost:3000
+3. 上传舱单文件测试处理功能
+4. 检查 HS 编码查询是否正常工作（需正确配置飞书应用）
