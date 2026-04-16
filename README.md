@@ -196,3 +196,42 @@ yarn add
 - `exceljs` (^4.4.0) - Excel 生成
 - `docxtemplater` (^3.68.3) - Word 生成
 - `pizzip` (^3.2.0) - ZIP 处理
+
+## HS 编码查询功能
+
+系统集成了飞书多维表格查询功能，可自动为商品添加 HS 编码：
+
+1. **自动查询**：处理舱单时，自动查询飞书表格中的 HS 编码
+2. **自动创建**：如果商品不存在，自动在飞书表格创建新记录
+3. **错误处理**：飞书 API 不可用时使用默认编码 12345678
+
+### 配置说明
+
+1. 设置飞书应用环境变量：
+   - `FEISHU_APP_ID`: 飞书应用 ID
+   - `FEISHU_APP_SECRET`: 飞书应用密钥
+   - `FEISHU_BASE_URL`: （可选）飞书多维表格链接
+
+2. 飞书应用需要「多维表格」权限
+
+### 相关文件
+- `hs-encoder.js`: HS 编码查询核心模块
+- `api/process.js`: 无服务器函数版本（支持 Vercel 部署）
+
+## Vercel 部署
+
+项目已配置支持 Vercel 无服务器部署：
+
+### 部署方式
+1. 将代码推送到 Git 仓库
+2. 在 Vercel 中导入项目
+3. 配置环境变量（见 `.env.example`）
+4. 自动部署
+
+### 项目结构适配
+- `api/process.js`: Vercel 无服务器函数
+- `public/index.html`: 静态前端界面
+- `templates/`: 文档模板（包含在部署包中）
+
+### 详细部署指南
+参见 [README_VERCEL.md](README_VERCEL.md) 文件。
