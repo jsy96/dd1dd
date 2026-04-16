@@ -559,6 +559,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     // 用逗号连接成字符串
     const cargoListString = goodsWithHS.join(', ');
     cargoListsWithHS.push(cargoListString);
+    // 添加到替换数据
+    replacementData[`{带HS的商品列表${i + 1}}`] = cargoListString;
   }
 
   console.log('总提单OK件（带HS）替换数据:', {
@@ -632,8 +634,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置带HS的商品列表到第12行第4列（C列）
-    const goodsListCell = worksheet.getCell('C12');
+    // 设置带HS的商品列表到第12行第4列（D列）
+    const goodsListCell = worksheet.getCell('D12');
     // 构建富文本，奇数个列表用红色，偶数个列表用黑色
     const richTextItems = [];
     for (let i = 0; i < cargoListsWithHS.length; i++) {
@@ -783,6 +785,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     // 用逗号连接成字符串
     const cargoListString = goodsList.join(', ');
     cargoListsWithoutHS.push(cargoListString);
+    // 添加到替换数据
+    replacementData[`{无HS的商品列表${i + 1}}`] = cargoListString;
   }
 
   console.log('总提单OK件（无HS）替换数据:', {
@@ -856,8 +860,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置无HS的商品列表到第12行第4列（C列）
-    const goodsListCell = worksheet.getCell('C12');
+    // 设置无HS的商品列表到第12行第4列（D列）
+    const goodsListCell = worksheet.getCell('D12');
     // 构建富文本，奇数个列表用红色，偶数个列表用黑色
     const richTextItems = [];
     for (let i = 0; i < cargoListsWithoutHS.length; i++) {
