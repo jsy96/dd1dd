@@ -223,8 +223,16 @@ async function generateExcelDocument(data) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 替换文本中的所有占位符实例
+      let newText = text;
+      // 全局替换占位符
+      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedPlaceholder, 'g');
+      newText = newText.replace(regex, replacement || '');
+
+      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
+      const isOnlyPlaceholder = text.trim() === placeholder;
+      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -240,7 +248,7 @@ async function generateExcelDocument(data) {
         cell.value = {
           richText: [{
             font: font,
-            text: replacement || ''
+            text: newText
           }]
         };
       }
@@ -466,8 +474,16 @@ async function generateOKBillWithHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 替换文本中的所有占位符实例
+      let newText = text;
+      // 全局替换占位符
+      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedPlaceholder, 'g');
+      newText = newText.replace(regex, replacement || '');
+
+      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
+      const isOnlyPlaceholder = text.trim() === placeholder;
+      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -483,7 +499,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
         cell.value = {
           richText: [{
             font: font,
-            text: replacement || ''
+            text: newText
           }]
         };
       }
@@ -661,8 +677,16 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 替换文本中的所有占位符实例
+      let newText = text;
+      // 全局替换占位符
+      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapedPlaceholder, 'g');
+      newText = newText.replace(regex, replacement || '');
+
+      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
+      const isOnlyPlaceholder = text.trim() === placeholder;
+      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -678,7 +702,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
         cell.value = {
           richText: [{
             font: font,
-            text: replacement || ''
+            text: newText
           }]
         };
       }
