@@ -651,7 +651,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     const goodsListCell = worksheet.getCell('D13');
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
-      const newRichText = [];
 
       // 为每个舱单生成替换映射（确保生成所有7个占位符）
       const replacementMap = {};
@@ -665,23 +664,44 @@ async function generateOKBillWithHS(firstData, allCargoData) {
 
       console.log(`总提单OK件（带HS）替换映射:`, JSON.stringify(replacementMap));
 
-      // 遍历每个富文本片段，替换其中的占位符
+      // 合并所有片段的文本，执行替换，然后重新分配到片段中
+      let fullText = '';
       for (const rt of originalRichText) {
-        let text = rt.text;
-        // 检查并替换此片段中的所有占位符
-        for (const [placeholder, replacement] of Object.entries(replacementMap)) {
-          // 使用字符串替换，不需要转义
-          text = text.split(placeholder).join(replacement);
-        }
-        // 保留原始格式
+        fullText += rt.text;
+      }
+
+      // 执行替换
+      let replacedText = fullText;
+      for (const [placeholder, replacement] of Object.entries(replacementMap)) {
+        replacedText = replacedText.split(placeholder).join(replacement);
+      }
+
+      // 重新分配到原始片段中，保留原始格式
+      let textIndex = 0;
+      const newRichText = [];
+      for (const rt of originalRichText) {
+        const originalLength = rt.text.length;
+        // 从替换后的文本中取相应长度的片段
+        const newText = replacedText.substr(textIndex, originalLength);
         newRichText.push({
           font: rt.font,
-          text: text
+          text: newText
+        });
+        textIndex += originalLength;
+      }
+
+      // 如果替换后的文本更长，添加剩余片段
+      if (textIndex < replacedText.length) {
+        const lastRt = originalRichText[originalRichText.length - 1];
+        newRichText.push({
+          font: lastRt.font,
+          text: replacedText.substr(textIndex)
         });
       }
 
       goodsListCell.value = { richText: newRichText };
       console.log(`总提单OK件（带HS）: 已替换D13单元格中的 ${Object.keys(replacementMap).length} 个商品列表占位符`);
+      console.log(`总提单OK件（带HS）原始文本长度: ${fullText.length}, 替换后文本长度: ${replacedText.length}`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
@@ -897,7 +917,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     const goodsListCell = worksheet.getCell('D13');
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
-      const newRichText = [];
 
       // 为每个舱单生成替换映射（确保生成所有7个占位符）
       const replacementMap = {};
@@ -911,23 +930,44 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
       console.log(`总提单OK件（无HS）替换映射:`, JSON.stringify(replacementMap));
 
-      // 遍历每个富文本片段，替换其中的占位符
+      // 合并所有片段的文本，执行替换，然后重新分配到片段中
+      let fullText = '';
       for (const rt of originalRichText) {
-        let text = rt.text;
-        // 检查并替换此片段中的所有占位符
-        for (const [placeholder, replacement] of Object.entries(replacementMap)) {
-          // 使用字符串替换，不需要转义
-          text = text.split(placeholder).join(replacement);
-        }
-        // 保留原始格式
+        fullText += rt.text;
+      }
+
+      // 执行替换
+      let replacedText = fullText;
+      for (const [placeholder, replacement] of Object.entries(replacementMap)) {
+        replacedText = replacedText.split(placeholder).join(replacement);
+      }
+
+      // 重新分配到原始片段中，保留原始格式
+      let textIndex = 0;
+      const newRichText = [];
+      for (const rt of originalRichText) {
+        const originalLength = rt.text.length;
+        // 从替换后的文本中取相应长度的片段
+        const newText = replacedText.substr(textIndex, originalLength);
         newRichText.push({
           font: rt.font,
-          text: text
+          text: newText
+        });
+        textIndex += originalLength;
+      }
+
+      // 如果替换后的文本更长，添加剩余片段
+      if (textIndex < replacedText.length) {
+        const lastRt = originalRichText[originalRichText.length - 1];
+        newRichText.push({
+          font: lastRt.font,
+          text: replacedText.substr(textIndex)
         });
       }
 
       goodsListCell.value = { richText: newRichText };
       console.log(`总提单OK件（无HS）: 已替换D13单元格中的 ${Object.keys(replacementMap).length} 个商品列表占位符`);
+      console.log(`总提单OK件（无HS）原始文本长度: ${fullText.length}, 替换后文本长度: ${replacedText.length}`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
