@@ -8,6 +8,14 @@ const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 const archiver = require('archiver');
 
+// HS编码转换工具
+let hsEncoder = null;
+try {
+  hsEncoder = require('../hs-encoder');
+} catch (error) {
+  console.log('HS编码转换模块加载失败，将使用默认HS编码:', error.message);
+}
+
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -63,6 +71,42 @@ function safeToInt(value) {
   }
   // 如果不是有效数字，返回空字符串
   return '';
+}
+
+/**
+ * 将无HS的商品列表转换为有HS的商品列表
+ * @param {string} goodsListWithoutHS - 逗号分隔的英文品名字符串
+ * @returns {Promise<string>} 有HS的商品列表
+ */
+async function convertGoodsListWithHS(goodsListWithoutHS) {
+  if (!goodsListWithoutHS || goodsListWithoutHS.trim() === '') {
+    return '';
+  }
+
+  // 如果HS编码转换模块不可用，使用默认HS编码
+  if (!hsEncoder || !process.env.FEISHU_BASE_URL) {
+    console.log('HS编码转换: 使用默认HS编码12345678');
+    const goodsNames = goodsListWithoutHS.split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+    return goodsNames.map(name => `${name} 12345678`).join(', ');
+  }
+
+  try {
+    console.log(`HS编码转换: 开始转换商品列表: ${goodsListWithoutHS.substring(0, 100)}...`);
+    const result = await hsEncoder.addHSCodes(goodsListWithoutHS, {
+      feishuBaseUrl: process.env.FEISHU_BASE_URL
+    });
+    console.log(`HS编码转换: 转换完成，结果: ${result.substring(0, 100)}...`);
+    return result;
+  } catch (error) {
+    console.error('HS编码转换失败，使用默认HS编码:', error.message);
+    // 失败时使用默认编码
+    const goodsNames = goodsListWithoutHS.split(',')
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+    return goodsNames.map(name => `${name} 12345678`).join(', ');
+  }
 }
 
 // 更新求和公式（数据行范围：15-21行，求和行：第22行）
@@ -548,6 +592,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     }
   }
 
+  // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
+  const shouldConvertHS = true;
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -563,7 +610,19 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
       // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
       const goods = cargo.英文品名 || '';
-      replacementData[`{无HS的商品列表${suffix}}`] = goods + (goods && i !== lastNonEmptyIndex ? ', ' : '');
+      let processedGoods = goods;
+      // 如果需要转换HS编码
+      if (shouldConvertHS && goods) {
+        try {
+          processedGoods = await convertGoodsListWithHS(goods);
+        } catch (error) {
+          console.error(`转换商品列表失败（舱单${suffix}），使用默认HS编码:`, error.message);
+          // 失败时使用默认编码
+          const goodsNames = goods.split(',').map(name => name.trim()).filter(name => name.length > 0);
+          processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
+        }
+      }
+      replacementData[`{无HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -762,6 +821,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     }
   }
 
+  // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
+  const shouldConvertHS = false;
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -777,7 +839,19 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
       // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
       const goods = cargo.英文品名 || '';
-      replacementData[`{无HS的商品列表${suffix}}`] = goods + (goods && i !== lastNonEmptyIndex ? ', ' : '');
+      let processedGoods = goods;
+      // 如果需要转换HS编码
+      if (shouldConvertHS && goods) {
+        try {
+          processedGoods = await convertGoodsListWithHS(goods);
+        } catch (error) {
+          console.error(`转换商品列表失败（舱单${suffix}），使用默认HS编码:`, error.message);
+          // 失败时使用默认编码
+          const goodsNames = goods.split(',').map(name => name.trim()).filter(name => name.length > 0);
+          processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
+        }
+      }
+      replacementData[`{无HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
