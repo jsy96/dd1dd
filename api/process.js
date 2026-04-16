@@ -620,9 +620,13 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       }
     });
 
-    // 第二遍：替换占位符
+    // 第二遍：替换占位符（跳过D13单元格，它有特殊的富文本处理）
     worksheet.eachRow((row, rowNumber) => {
       row.eachCell((cell) => {
+        // 跳过D13单元格，它后面有特殊处理
+        if (rowNumber === 13 && cell.address === 'D13') {
+          return;
+        }
         for (const [placeholder, replacement] of Object.entries(replacementData)) {
           if (replacePlaceholder(cell, placeholder, replacement)) {
             replacedCount++;
@@ -862,9 +866,13 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       }
     });
 
-    // 第二遍：替换占位符
+    // 第二遍：替换占位符（跳过D13单元格，它有特殊的富文本处理）
     worksheet.eachRow((row, rowNumber) => {
       row.eachCell((cell) => {
+        // 跳过D13单元格，它后面有特殊处理
+        if (rowNumber === 13 && cell.address === 'D13') {
+          return;
+        }
         for (const [placeholder, replacement] of Object.entries(replacementData)) {
           if (replacePlaceholder(cell, placeholder, replacement)) {
             replacedCount++;
