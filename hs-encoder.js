@@ -18,6 +18,9 @@
 
 const path = require('path');
 const https = require('https');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
 /**
  * 解析飞书多维表格的直接链接，提取 app_token 和 table_id
@@ -830,6 +833,94 @@ async function queryHSByDescription(baseToken, tableId, searchText, options = {}
 }
 
 /**
+ * 完全模拟PowerShell命令的HS编码查询逻辑（按数组索引匹配）
+ * @param {string} baseToken - 飞书多维表格应用token
+ * @param {string} tableId - 表格ID
+ * @param {string} searchText - 搜索关键词（支持(?i)前缀）
+ * @param {object} options - 选项
+ * @param {number} options.fieldIndex - 要筛选的字段索引（从0开始），默认1
+ * @param {number} options.returnIndex - 要返回的字段索引（从0开始），默认0
+ * @param {number} options.limit - 最大记录数，默认500
+ * @returns {Promise<Array<string>>} 匹配记录的指定字段值数组
+ */
+async function queryHSByDescriptionPSLike(baseToken, tableId, searchText, options = {}) {
+  const {
+    fieldIndex = 1,
+    returnIndex = 0,
+    limit = 500
+  } = options;
+
+  // 处理PowerShell风格的(?i)前缀（不区分大小写）
+  const isCaseInsensitive = searchText.startsWith('(?i)');
+  const actualSearchText = isCaseInsensitive ? searchText.substring(4) : searchText;
+  const searchPattern = new RegExp(actualSearchText, isCaseInsensitive ? 'i' : '');
+
+  console.log(`[queryHSByDescriptionPSLike] 使用 lark-cli 查询: baseToken=${baseToken}, tableId=${tableId}`);
+  console.log(`[queryHSByDescriptionPSLike] 搜索: "${searchText}" -> /${actualSearchText}/${isCaseInsensitive ? 'i' : ''}`);
+  console.log(`[queryHSByDescriptionPSLike] 字段索引: 筛选字段[${fieldIndex}], 返回字段[${returnIndex}], 限制: ${limit}`);
+
+  try {
+    // 执行 lark-cli 命令（使用与PowerShell命令相同的认证方式）
+    const command = `lark-cli base +record-list --base-token ${baseToken} --table-id ${tableId} --limit ${limit}`;
+    console.log(`[queryHSByDescriptionPSLike] 执行命令: ${command}`);
+
+    const { stdout, stderr } = await execAsync(command);
+
+    if (stderr) {
+      console.warn(`[queryHSByDescriptionPSLike] lark-cli stderr: ${stderr}`);
+    }
+
+    // 解析 JSON 输出
+    const result = JSON.parse(stdout);
+
+    if (!result.ok) {
+      throw new Error(`lark-cli 返回错误: ${JSON.stringify(result)}`);
+    }
+
+    const { data, fields, field_id_list } = result.data;
+
+    console.log(`[queryHSByDescriptionPSLike] 获取到 ${data.length} 条记录`);
+    console.log(`[queryHSByDescriptionPSLike] 字段列表: ${fields.join(', ')}`);
+    console.log(`[queryHSByDescriptionPSLike] 字段ID列表: ${field_id_list.join(', ')}`);
+
+    // 筛选匹配的记录（完全模仿PowerShell的$_[1] -match逻辑）
+    const matchedValues = [];
+
+    for (const record of data) {
+      // record 是数组，例如: [39269090, "PEN ORGANIZER", "笔筒 / 笔架"]
+      // fields 是字段名列表: ["HS编码", "英文品名", "中文备注"]
+
+      // 检查索引是否有效
+      if (record.length <= Math.max(fieldIndex, returnIndex)) {
+        console.warn(`[queryHSByDescriptionPSLike] 记录字段数不足: ${record.length}, 需要至少 ${Math.max(fieldIndex, returnIndex) + 1}`);
+        continue;
+      }
+
+      // 获取筛选字段的值（对应PowerShell的$_[1]）
+      const filterValue = String(record[fieldIndex] || '').trim();
+
+      // 匹配逻辑：和PowerShell的-match完全一致
+      if (searchPattern.test(filterValue)) {
+        // 获取返回字段的值（对应PowerShell的$_[0]）
+        const returnValue = String(record[returnIndex] || '').trim();
+
+        if (returnValue) {
+          matchedValues.push(returnValue);
+          console.log(`[queryHSByDescriptionPSLike] 匹配: "${filterValue}" -> "${returnValue}"`);
+        }
+      }
+    }
+
+    console.log(`[queryHSByDescriptionPSLike] 找到 ${matchedValues.length} 条匹配记录`);
+    return matchedValues;
+
+  } catch (error) {
+    console.error(`[queryHSByDescriptionPSLike] PowerShell风格查询失败:`, error.message);
+    throw error;
+  }
+}
+
+/**
  * 使用lark-cli技能的完整工作流程示例
  * @param {string} goodsListWithoutHS - 逗号分隔的英文品名字符串
  * @param {string} feishuBaseUrl - 飞书多维表格直接链接
@@ -923,6 +1014,7 @@ module.exports = {
   getOrCreateHSCode,
   getTableFields,
   queryHSByDescription,
+  queryHSByDescriptionPSLike,
   getWorkflowInstructions
 };
 
@@ -971,6 +1063,19 @@ HS编码转换工具
        fieldIndex: 1,
        returnIndex: 0,
        limit: 500
+     }
+   );
+
+   // 完全模拟PowerShell命令的查询（按数组索引匹配，不依赖字段定义）
+   const { queryHSByDescriptionPSLike } = require('./hs-encoder');
+   const results4 = await queryHSByDescriptionPSLike(
+     "OoNybRydGaN6Wwspy41cnQQCnGe",
+     "tbl2uWivrvboRe2a",
+     "(?i)ROPE", // 搜索关键词（不区分大小写）
+     {
+       fieldIndex: 1,  // 匹配第2个字段（和PowerShell的$_[1]一致）
+       returnIndex: 0, // 返回第1个字段（和PowerShell的$_[0]一致）
+       limit: 500      // 和PowerShell的--limit 500一致
      }
    );
 
