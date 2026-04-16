@@ -643,26 +643,63 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置带HS的商品列表到D14单元格
-    const goodsListCell = worksheet.getCell('D14');
-    // 构建富文本，奇数个列表用红色，偶数个列表用黑色
-    const richTextItems = [];
-    for (let i = 0; i < cargoListsWithHS.length; i++) {
-      const isOdd = (i + 1) % 2 === 1; // 第1、3、5...个列表是奇数
-      const color = isOdd ? 'FFFF0000' : 'FF000000'; // 红色 ARGB: FFFF0000, 黑色 ARGB: FF000000
-      richTextItems.push({
-        font: { color: { argb: color } },
-        text: cargoListsWithHS[i]
-      });
-      // 如果不是最后一个列表，添加换行符
-      if (i < cargoListsWithHS.length - 1) {
-        richTextItems.push({
-          font: { color: { argb: 'FF000000' } },
-          text: '\n'
+    // 替换D13单元格中的商品列表占位符，保留原始格式
+    const goodsListCell = worksheet.getCell('D13');
+    if (goodsListCell.value && goodsListCell.value.richText) {
+      // 获取原始富文本并替换占位符
+      const originalRichText = goodsListCell.value.richText;
+      const newRichText = [];
+
+      // 为每个舱单生成替换映射
+      const replacements = [];
+      for (let i = 0; i < cargoListsWithHS.length; i++) {
+        replacements.push({
+          placeholder: `{带HS的商品列表${i + 1}}`,
+          replacement: cargoListsWithHS[i]
         });
       }
+
+      // 遍历原始富文本片段
+      let currentText = '';
+      for (const rt of originalRichText) {
+        currentText += rt.text;
+      }
+
+      // 执行替换
+      let replacedText = currentText;
+      for (const repl of replacements) {
+        replacedText = replacedText.replace(repl.placeholder, repl.replacement);
+      }
+
+      // 构建新的富文本，保留原始格式
+      let textIndex = 0;
+      let rtIndex = 0;
+      while (textIndex < replacedText.length && rtIndex < originalRichText.length) {
+        const originalRt = originalRichText[rtIndex];
+        const originalText = originalRt.text;
+
+        // 复制原始格式
+        newRichText.push({
+          font: originalRt.font,
+          text: replacedText.substr(textIndex, originalText.length)
+        });
+
+        textIndex += originalText.length;
+        rtIndex++;
+      }
+
+      // 如果替换后的文本更长，添加剩余文本（使用最后一个片段的格式）
+      if (textIndex < replacedText.length) {
+        const lastRt = originalRichText[originalRichText.length - 1];
+        newRichText.push({
+          font: lastRt.font,
+          text: replacedText.substr(textIndex)
+        });
+      }
+
+      goodsListCell.value = { richText: newRichText };
+      console.log(`总提单OK件（带HS）: 已替换D13单元格中的 ${replacements.length} 个商品列表占位符`);
     }
-    goodsListCell.value = { richText: richTextItems };
 
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
@@ -869,26 +906,63 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置无HS的商品列表到D14单元格
-    const goodsListCell = worksheet.getCell('D14');
-    // 构建富文本，奇数个列表用红色，偶数个列表用黑色
-    const richTextItems = [];
-    for (let i = 0; i < cargoListsWithoutHS.length; i++) {
-      const isOdd = (i + 1) % 2 === 1; // 第1、3、5...个列表是奇数
-      const color = isOdd ? 'FFFF0000' : 'FF000000'; // 红色 ARGB: FFFF0000, 黑色 ARGB: FF000000
-      richTextItems.push({
-        font: { color: { argb: color } },
-        text: cargoListsWithoutHS[i]
-      });
-      // 如果不是最后一个列表，添加换行符
-      if (i < cargoListsWithoutHS.length - 1) {
-        richTextItems.push({
-          font: { color: { argb: 'FF000000' } },
-          text: '\n'
+    // 替换D13单元格中的商品列表占位符，保留原始格式
+    const goodsListCell = worksheet.getCell('D13');
+    if (goodsListCell.value && goodsListCell.value.richText) {
+      // 获取原始富文本并替换占位符
+      const originalRichText = goodsListCell.value.richText;
+      const newRichText = [];
+
+      // 为每个舱单生成替换映射
+      const replacements = [];
+      for (let i = 0; i < cargoListsWithoutHS.length; i++) {
+        replacements.push({
+          placeholder: `{无HS的商品列表${i + 1}}`,
+          replacement: cargoListsWithoutHS[i]
         });
       }
+
+      // 遍历原始富文本片段
+      let currentText = '';
+      for (const rt of originalRichText) {
+        currentText += rt.text;
+      }
+
+      // 执行替换
+      let replacedText = currentText;
+      for (const repl of replacements) {
+        replacedText = replacedText.replace(repl.placeholder, repl.replacement);
+      }
+
+      // 构建新的富文本，保留原始格式
+      let textIndex = 0;
+      let rtIndex = 0;
+      while (textIndex < replacedText.length && rtIndex < originalRichText.length) {
+        const originalRt = originalRichText[rtIndex];
+        const originalText = originalRt.text;
+
+        // 复制原始格式
+        newRichText.push({
+          font: originalRt.font,
+          text: replacedText.substr(textIndex, originalText.length)
+        });
+
+        textIndex += originalText.length;
+        rtIndex++;
+      }
+
+      // 如果替换后的文本更长，添加剩余文本（使用最后一个片段的格式）
+      if (textIndex < replacedText.length) {
+        const lastRt = originalRichText[originalRichText.length - 1];
+        newRichText.push({
+          font: lastRt.font,
+          text: replacedText.substr(textIndex)
+        });
+      }
+
+      goodsListCell.value = { richText: newRichText };
+      console.log(`总提单OK件（无HS）: 已替换D13单元格中的 ${replacements.length} 个商品列表占位符`);
     }
-    goodsListCell.value = { richText: richTextItems };
 
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
