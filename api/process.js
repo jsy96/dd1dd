@@ -9,6 +9,85 @@ const Docxtemplater = require('docxtemplater');
 const archiver = require('archiver');
 const { getHSCodes } = require('./feishu-service');
 
+/**
+ * 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+ * @param {Worksheet} worksheet - Excel工作表
+ * @param {string[]} cargoGoodsLists - 每个舱单的商品列表字符串数组
+ */
+function applyGoodsListColor(worksheet, cargoGoodsLists) {
+  // 辅助函数：获取单元格文本
+  const getCellText = (cell) => {
+    if (!cell.value) return '';
+    if (typeof cell.value === 'string') return cell.value;
+    if (cell.value.richText) {
+      return cell.value.richText.map(rt => rt.text || '').join('');
+    }
+    return '';
+  };
+
+  // 商品列表通常位于 D13 单元格（根据模板）
+  const goodsListCell = worksheet.getCell('D13');
+
+  if (!goodsListCell) {
+    console.log('未找到商品列表单元格 D13');
+    return;
+  }
+
+  const cellText = getCellText(goodsListCell);
+  if (!cellText || cellText.trim() === '') {
+    console.log('单元格 D13 为空，跳过颜色设置');
+    return;
+  }
+
+  // 过滤掉空字符串，但保留原始索引信息
+  const nonEmptyListsWithIndex = [];
+  cargoGoodsLists.forEach((goodsList, originalIndex) => {
+    if (goodsList && goodsList.trim() !== '') {
+      nonEmptyListsWithIndex.push({
+        goodsList,
+        originalIndex: originalIndex // 舱单序号从0开始
+      });
+    }
+  });
+
+  if (nonEmptyListsWithIndex.length === 0) {
+    console.log('舱单商品列表数组为空，跳过颜色设置');
+    return;
+  }
+
+  console.log(`按舱单设置颜色，共有 ${nonEmptyListsWithIndex.length} 个舱单的商品列表（原始总数：${cargoGoodsLists.length}）`);
+
+  // 创建富文本数组
+  const richTextParts = [];
+  nonEmptyListsWithIndex.forEach((item, arrayIndex) => {
+    const { goodsList, originalIndex } = item;
+    // 判断舱单序号（原始序号+1）：奇数红色，偶数黑色
+    const isOdd = (originalIndex + 1) % 2 === 1;
+    const color = isOdd ? 'FFFF0000' : 'FF000000'; // 红色 ARGB: FFFF0000，黑色 ARGB: FF000000
+
+    // 添加舱单的商品列表文本
+    richTextParts.push({
+      font: { color: { argb: color } },
+      text: goodsList
+    });
+
+    // 添加分隔符（除了最后一个舱单）
+    if (arrayIndex < nonEmptyListsWithIndex.length - 1) {
+      richTextParts.push({
+        font: { color: { argb: 'FF000000' } }, // 分隔符使用黑色
+        text: ', '
+      });
+    }
+  });
+
+  // 设置单元格值为富文本
+  goodsListCell.value = {
+    richText: richTextParts
+  };
+
+  console.log(`单元格 D13 设置了 ${nonEmptyListsWithIndex.length} 个舱单的商品列表颜色（按原始舱单序号，奇数舱单红色，偶数舱单黑色）`);
+}
+
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -551,34 +630,54 @@ async function generateOKBillWithHS(firstData, allCargoData) {
 
   // 为每个舱单生成带HS的商品列表
   const cargoListsWithHS = [];
-  for (let i = 0; i < allCargoData.length; i++) {
-    const cargo = allCargoData[i];
-    const englishNames = cargo.英文品名 || '';
-    const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+  const maxContainers = 20; // 最多支持20个舱单
 
-    // 从飞书表格获取HS编码
-    const hsCodes = await getHSCodes(goodsList);
+  // 找到最后一个非空商品列表的索引
+  let lastNonEmptyIndex = -1;
+  for (let j = allCargoData.length - 1; j >= 0; j--) {
+    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
+      lastNonEmptyIndex = j;
+      break;
+    }
+  }
 
-    // 为每个商品添加对应的HS编码
-    const goodsWithHS = goodsList.map((goods, index) => {
-      const hsCode = hsCodes[index] || '88886666';
-      return `${goods} ${hsCode}`;
-    });
+  for (let i = 0; i < maxContainers; i++) {
+    const suffix = i + 1;
+    if (i < allCargoData.length) {
+      const cargo = allCargoData[i];
+      const englishNames = cargo.英文品名 || '';
+      const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
 
-    // 用逗号连接成字符串
-    const cargoListString = goodsWithHS.join(', ');
-    cargoListsWithHS.push(cargoListString);
-    // 添加到替换数据
-    replacementData[`{带HS的商品列表${i + 1}}`] = cargoListString;
+      // 从飞书表格获取HS编码
+      const hsCodes = await getHSCodes(goodsList);
+
+      // 为每个商品添加对应的HS编码
+      const goodsWithHS = goodsList.map((goods, index) => {
+        const hsCode = hsCodes[index] || '88886666';
+        return `${goods} ${hsCode}`;
+      });
+
+      // 用逗号连接成字符串
+      const cargoListString = goodsWithHS.join(', ');
+
+      // 保存到数组（用于颜色设置）
+      cargoListsWithHS.push(cargoListString);
+
+      // 添加到替换数据，非空商品列表后添加分隔符（除了最后一个非空商品列表）
+      replacementData[`{带HS的商品列表${suffix}}`] = cargoListString + (cargoListString && i !== lastNonEmptyIndex ? ', ' : '');
+    } else {
+      // 填充空的占位符
+      replacementData[`{带HS的商品列表${suffix}}`] = '';
+      cargoListsWithHS.push('');
+    }
   }
 
   console.log('总提单OK件（带HS）替换数据:', {
     提单号: firstData.提单号,
-    商品列表长度: goodsList.length,
-    商品列表内容: goodsList,
+    商品列表长度: firstData.英文品名 ? firstData.英文品名.split(',').filter(item => item.trim() !== '').length : 0,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
-    带HS的商品列表数量: cargoListsWithHS.length,
+    带HS的商品列表数量: cargoListsWithHS.filter(x => x !== '').length,
     带HS的商品列表: cargoListsWithHS,
   });
 
@@ -647,48 +746,10 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 替换D13单元格中的商品列表占位符，保留原始格式
-    const goodsListCell = worksheet.getCell('D13');
-    if (goodsListCell.value && goodsListCell.value.richText) {
-      const originalRichText = goodsListCell.value.richText;
+    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+    applyGoodsListColor(worksheet, cargoListsWithHS);
 
-      console.log(`总提单OK件（带HS）D13片段数: ${originalRichText.length}`);
-      console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
-
-      // 创建新的富文本，为每个舱单分配一个片段
-      const newRichText = [];
-
-      for (let i = 0; i < 7; i++) {
-        if (i < originalRichText.length) {
-          const originalRt = originalRichText[i];
-
-          if (i < cargoListsWithHS.length) {
-            // 有数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: cargoListsWithHS[i]
-            });
-            console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoListsWithHS[i]}" (颜色: ${originalRt.font.color.argb})`);
-          } else {
-            // 无数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: ''
-            });
-            console.log(`总提单OK件（带HS）片段${i + 1}: "(空)"`);
-          }
-        }
-      }
-
-      goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（带HS）D13单元格已设置 ${newRichText.length} 个片段`);
-    }
-
-    // 更新第22行的求和公式（数据行范围：15-21行）
-    // 注意：现在不删除行，只清空行内容，因此不需要更新公式
-    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
-
-    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithHS.length} 个商品列表`);
+    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -807,24 +868,45 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
   // 为每个舱单生成无HS的商品列表
   const cargoListsWithoutHS = [];
-  for (let i = 0; i < allCargoData.length; i++) {
-    const cargo = allCargoData[i];
-    const englishNames = cargo.英文品名 || '';
-    const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
-    // 用逗号连接成字符串
-    const cargoListString = goodsList.join(', ');
-    cargoListsWithoutHS.push(cargoListString);
-    // 添加到替换数据
-    replacementData[`{无HS的商品列表${i + 1}}`] = cargoListString;
+  const maxContainers = 20; // 最多支持20个舱单
+
+  // 找到最后一个非空商品列表的索引
+  let lastNonEmptyIndex = -1;
+  for (let j = allCargoData.length - 1; j >= 0; j--) {
+    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
+      lastNonEmptyIndex = j;
+      break;
+    }
+  }
+
+  for (let i = 0; i < maxContainers; i++) {
+    const suffix = i + 1;
+    if (i < allCargoData.length) {
+      const cargo = allCargoData[i];
+      const englishNames = cargo.英文品名 || '';
+      const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+
+      // 用逗号连接成字符串
+      const cargoListString = goodsList.join(', ');
+
+      // 保存到数组（用于颜色设置）
+      cargoListsWithoutHS.push(cargoListString);
+
+      // 添加到替换数据，非空商品列表后添加分隔符（除了最后一个非空商品列表）
+      replacementData[`{无HS的商品列表${suffix}}`] = cargoListString + (cargoListString && i !== lastNonEmptyIndex ? ', ' : '');
+    } else {
+      // 填充空的占位符
+      replacementData[`{无HS的商品列表${suffix}}`] = '';
+      cargoListsWithoutHS.push('');
+    }
   }
 
   console.log('总提单OK件（无HS）替换数据:', {
     提单号: firstData.提单号,
-    商品列表长度: goodsList.length,
-    商品列表内容: goodsList,
+    商品列表长度: firstData.英文品名 ? firstData.英文品名.split(',').filter(item => item.trim() !== '').length : 0,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
-    无HS的商品列表数量: cargoListsWithoutHS.length,
+    无HS的商品列表数量: cargoListsWithoutHS.filter(x => x !== '').length,
     无HS的商品列表: cargoListsWithoutHS,
   });
 
@@ -866,13 +948,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       }
     });
 
-    // 第二遍：替换占位符（跳过D13单元格，它有特殊的富文本处理）
+    // 第二遍：替换占位符
     worksheet.eachRow((row, rowNumber) => {
       row.eachCell((cell) => {
-        // 跳过D13单元格，它后面有特殊处理
-        if (rowNumber === 13 && cell.address === 'D13') {
-          return;
-        }
         for (const [placeholder, replacement] of Object.entries(replacementData)) {
           if (replacePlaceholder(cell, placeholder, replacement)) {
             replacedCount++;
@@ -893,48 +971,10 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 替换D13单元格中的商品列表占位符，保留原始格式
-    const goodsListCell = worksheet.getCell('D13');
-    if (goodsListCell.value && goodsListCell.value.richText) {
-      const originalRichText = goodsListCell.value.richText;
+    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+    applyGoodsListColor(worksheet, cargoListsWithoutHS);
 
-      console.log(`总提单OK件（无HS）D13片段数: ${originalRichText.length}`);
-      console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
-
-      // 创建新的富文本，为每个舱单分配一个片段
-      const newRichText = [];
-
-      for (let i = 0; i < 7; i++) {
-        if (i < originalRichText.length) {
-          const originalRt = originalRichText[i];
-
-          if (i < cargoListsWithoutHS.length) {
-            // 有数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: cargoListsWithoutHS[i]
-            });
-            console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoListsWithoutHS[i]}" (颜色: ${originalRt.font.color.argb})`);
-          } else {
-            // 无数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: ''
-            });
-            console.log(`总提单OK件（无HS）片段${i + 1}: "(空)"`);
-          }
-        }
-      }
-
-      goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（无HS）D13单元格已设置 ${newRichText.length} 个片段`);
-    }
-
-    // 更新第22行的求和公式（数据行范围：15-21行）
-    // 注意：现在不删除行，只清空行内容，因此不需要更新公式
-    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
-
-    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithoutHS.length} 个商品列表`);
+    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
   });
 
   return workbook.xlsx.writeBuffer();
