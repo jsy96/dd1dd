@@ -634,8 +634,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置带HS的商品列表到D13单元格
-    const goodsListCell = worksheet.getCell('D13');
+    // 设置带HS的商品列表到D14单元格
+    const goodsListCell = worksheet.getCell('D14');
     // 构建富文本，奇数个列表用红色，偶数个列表用黑色
     const richTextItems = [];
     for (let i = 0; i < cargoListsWithHS.length; i++) {
@@ -860,8 +860,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
-    // 设置无HS的商品列表到D13单元格
-    const goodsListCell = worksheet.getCell('D13');
+    // 设置无HS的商品列表到D14单元格
+    const goodsListCell = worksheet.getCell('D14');
     // 构建富文本，奇数个列表用红色，偶数个列表用黑色
     const richTextItems = [];
     for (let i = 0; i < cargoListsWithoutHS.length; i++) {
