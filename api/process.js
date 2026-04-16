@@ -196,8 +196,9 @@ function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
  * 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
  * @param {Worksheet} worksheet - Excel工作表
  * @param {string} placeholderPrefix - 占位符前缀，例如 '带HS的商品列表' 或 '无HS的商品列表'
+ * @param {string[]} [cargoGoodsLists] - 每个舱单的商品列表字符串数组（可选），如果提供则按舱单设置颜色
  */
-function applyGoodsListColor(worksheet, placeholderPrefix) {
+function applyGoodsListColor(worksheet, placeholderPrefix, cargoGoodsLists) {
   // 辅助函数：获取单元格文本
   const getCellText = (cell) => {
     if (!cell.value) return '';
@@ -232,43 +233,94 @@ function applyGoodsListColor(worksheet, placeholderPrefix) {
       return;
     }
 
-    // 按分隔符 ', ' 拆分文本，得到每个舱单的商品列表
-    // 注意：最后一个商品列表后没有分隔符
-    const parts = cellText.split(', ');
-
-    // 如果只有一个部分或没有分隔符，可能所有商品列表都在一个部分中
-    if (parts.length <= 1) {
-      console.log(`单元格 ${cell.address} 只有一个商品列表部分，不设置颜色`);
-      return;
-    }
-
-    // 创建富文本数组
-    const richTextParts = [];
-    parts.forEach((part, index) => {
-      // 判断舱单序号（索引+1）：奇数红色，偶数黑色
-      const isOdd = (index + 1) % 2 === 1;
-      const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
-
-      richTextParts.push({
-        font: { color: { argb: color } },
-        text: part
+    // 如果有舱单商品列表数组，按舱单设置颜色
+    if (cargoGoodsLists && cargoGoodsLists.length > 0) {
+      // 过滤掉空字符串，但保留原始索引信息
+      const nonEmptyListsWithIndex = [];
+      cargoGoodsLists.forEach((goodsList, originalIndex) => {
+        if (goodsList && goodsList.trim() !== '') {
+          nonEmptyListsWithIndex.push({
+            goodsList,
+            originalIndex: originalIndex + 1 // 舱单序号从1开始
+          });
+        }
       });
 
-      // 添加分隔符（除了最后一个部分）
-      if (index < parts.length - 1) {
-        richTextParts.push({
-          font: { color: { argb: '000000' } }, // 分隔符使用黑色
-          text: ', '
-        });
+      if (nonEmptyListsWithIndex.length === 0) {
+        console.log(`舱单商品列表数组为空，跳过颜色设置`);
+        return;
       }
-    });
 
-    // 设置单元格值为富文本
-    cell.value = {
-      richText: richTextParts
-    };
+      console.log(`按舱单设置颜色，共有 ${nonEmptyListsWithIndex.length} 个舱单的商品列表（原始总数：${cargoGoodsLists.length}）`);
 
-    console.log(`单元格 ${cell.address} 设置了 ${parts.length} 个商品列表部分的颜色（奇数红色，偶数黑色）`);
+      // 创建富文本数组
+      const richTextParts = [];
+      nonEmptyListsWithIndex.forEach((item, arrayIndex) => {
+        const { goodsList, originalIndex } = item;
+        // 判断舱单序号（原始序号）：奇数红色，偶数黑色
+        const isOdd = originalIndex % 2 === 1;
+        const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
+
+        // 添加舱单的商品列表文本
+        richTextParts.push({
+          font: { color: { argb: color } },
+          text: goodsList
+        });
+
+        // 添加分隔符（除了最后一个舱单）
+        if (arrayIndex < nonEmptyListsWithIndex.length - 1) {
+          richTextParts.push({
+            font: { color: { argb: '000000' } }, // 分隔符使用黑色
+            text: ', '
+          });
+        }
+      });
+
+      // 设置单元格值为富文本
+      cell.value = {
+        richText: richTextParts
+      };
+
+      console.log(`单元格 ${cell.address} 设置了 ${nonEmptyListsWithIndex.length} 个舱单的商品列表颜色（按原始舱单序号，奇数舱单红色，偶数舱单黑色）`);
+    } else {
+      // 原有逻辑：按分隔符 ', ' 拆分文本，得到每个商品项（为了向后兼容）
+      // 注意：这个逻辑是按商品项设置颜色，不是按舱单
+      const parts = cellText.split(', ');
+
+      // 如果只有一个部分或没有分隔符，可能所有商品列表都在一个部分中
+      if (parts.length <= 1) {
+        console.log(`单元格 ${cell.address} 只有一个商品列表部分，不设置颜色`);
+        return;
+      }
+
+      // 创建富文本数组
+      const richTextParts = [];
+      parts.forEach((part, index) => {
+        // 判断序号（索引+1）：奇数红色，偶数黑色
+        const isOdd = (index + 1) % 2 === 1;
+        const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
+
+        richTextParts.push({
+          font: { color: { argb: color } },
+          text: part
+        });
+
+        // 添加分隔符（除了最后一个部分）
+        if (index < parts.length - 1) {
+          richTextParts.push({
+            font: { color: { argb: '000000' } }, // 分隔符使用黑色
+            text: ', '
+          });
+        }
+      });
+
+      // 设置单元格值为富文本
+      cell.value = {
+        richText: richTextParts
+      };
+
+      console.log(`单元格 ${cell.address} 设置了 ${parts.length} 个商品项的颜色（奇数红色，偶数黑色）`);
+    }
   });
 }
 
@@ -675,6 +727,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
   // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
   const shouldConvertHS = true;
 
+  // 收集每个舱单的商品列表（不带分隔符），用于颜色设置
+  const cargoGoodsLists = [];
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -702,6 +757,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
           processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
         }
       }
+      // 保存到数组（不带分隔符），用于颜色设置
+      cargoGoodsLists.push(processedGoods);
       replacementData[`{带HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
@@ -715,6 +772,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
       // 清空带HS的商品列表占位符
       replacementData[`{带HS的商品列表${suffix}}`] = '';
+      // 保存空字符串到数组
+      cargoGoodsLists.push('');
     }
   }
 
@@ -795,7 +854,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
 
     // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
-    applyGoodsListColor(worksheet, '带HS的商品列表');
+    applyGoodsListColor(worksheet, '带HS的商品列表', cargoGoodsLists);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -907,6 +966,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
   const shouldConvertHS = false;
 
+  // 收集每个舱单的商品列表（不带分隔符），用于颜色设置
+  const cargoGoodsLists = [];
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -934,6 +996,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
           processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
         }
       }
+      // 保存到数组（不带分隔符），用于颜色设置
+      cargoGoodsLists.push(processedGoods);
       replacementData[`{无HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
@@ -947,6 +1011,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
       // 清空无HS的商品列表占位符
       replacementData[`{无HS的商品列表${suffix}}`] = '';
+      // 保存空字符串到数组
+      cargoGoodsLists.push('');
     }
   }
 
@@ -1027,7 +1093,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
 
     // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
-    applyGoodsListColor(worksheet, '无HS的商品列表');
+    applyGoodsListColor(worksheet, '无HS的商品列表', cargoGoodsLists);
   });
 
   return workbook.xlsx.writeBuffer();
