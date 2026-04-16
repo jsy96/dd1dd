@@ -65,23 +65,6 @@ function safeToInt(value) {
   return '';
 }
 
-/**
- * 将无HS的商品列表转换为有HS的商品列表
- * @param {string} goodsListWithoutHS - 逗号分隔的英文品名字符串
- * @returns {Promise<string>} 有HS的商品列表
- */
-async function convertGoodsListWithHS(goodsListWithoutHS) {
-  if (!goodsListWithoutHS || goodsListWithoutHS.trim() === '') {
-    return '';
-  }
-
-  // 所有商品的HS编码直接使用 12345678
-  const goodsNames = goodsListWithoutHS.split(',')
-    .map(name => name.trim())
-    .filter(name => name.length > 0);
-  return goodsNames.map(name => `${name} 12345678`).join(', ');
-}
-
 // 更新求和公式（数据行范围：15-21行，求和行：第22行）
 function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
   // 计算在数据行范围（15-21）内删除了多少行
@@ -165,138 +148,6 @@ function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
   });
 }
 
-/**
- * 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
- * @param {Worksheet} worksheet - Excel工作表
- * @param {string} placeholderPrefix - 占位符前缀，例如 '带HS的商品列表' 或 '无HS的商品列表'
- * @param {string[]} [cargoGoodsLists] - 每个舱单的商品列表字符串数组（可选），如果提供则按舱单设置颜色
- */
-function applyGoodsListColor(worksheet, placeholderPrefix, cargoGoodsLists) {
-  // 辅助函数：获取单元格文本
-  const getCellText = (cell) => {
-    if (!cell.value) return '';
-    if (typeof cell.value === 'string') return cell.value;
-    if (cell.value.richText) {
-      return cell.value.richText.map(rt => rt.text || '').join('');
-    }
-    return '';
-  };
-
-  // 商品列表通常位于 D13 和 E13 单元格（根据模板）
-  const targetAddresses = ['D13', 'E13'];
-  const targetCells = [];
-  targetAddresses.forEach(address => {
-    const cell = worksheet.getCell(address);
-    if (cell) {
-      targetCells.push(cell);
-    }
-  });
-
-  if (targetCells.length === 0) {
-    console.log(`未找到商品列表单元格 D13/E13`);
-    return;
-  }
-
-  console.log(`找到 ${targetCells.length} 个商品列表单元格`);
-
-  targetCells.forEach((cell) => {
-    const cellText = getCellText(cell);
-    if (!cellText || cellText.trim() === '') {
-      console.log(`单元格 ${cell.address} 为空，跳过颜色设置`);
-      return;
-    }
-
-    // 如果有舱单商品列表数组，按舱单设置颜色
-    if (cargoGoodsLists && cargoGoodsLists.length > 0) {
-      // 过滤掉空字符串，但保留原始索引信息
-      const nonEmptyListsWithIndex = [];
-      cargoGoodsLists.forEach((goodsList, originalIndex) => {
-        if (goodsList && goodsList.trim() !== '') {
-          nonEmptyListsWithIndex.push({
-            goodsList,
-            originalIndex: originalIndex + 1 // 舱单序号从1开始
-          });
-        }
-      });
-
-      if (nonEmptyListsWithIndex.length === 0) {
-        console.log(`舱单商品列表数组为空，跳过颜色设置`);
-        return;
-      }
-
-      console.log(`按舱单设置颜色，共有 ${nonEmptyListsWithIndex.length} 个舱单的商品列表（原始总数：${cargoGoodsLists.length}）`);
-
-      // 创建富文本数组
-      const richTextParts = [];
-      nonEmptyListsWithIndex.forEach((item, arrayIndex) => {
-        const { goodsList, originalIndex } = item;
-        // 判断舱单序号（原始序号）：奇数红色，偶数黑色
-        const isOdd = originalIndex % 2 === 1;
-        const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
-
-        // 添加舱单的商品列表文本
-        richTextParts.push({
-          font: { color: { argb: color } },
-          text: goodsList
-        });
-
-        // 添加分隔符（除了最后一个舱单）
-        if (arrayIndex < nonEmptyListsWithIndex.length - 1) {
-          richTextParts.push({
-            font: { color: { argb: '000000' } }, // 分隔符使用黑色
-            text: ', '
-          });
-        }
-      });
-
-      // 设置单元格值为富文本
-      cell.value = {
-        richText: richTextParts
-      };
-
-      console.log(`单元格 ${cell.address} 设置了 ${nonEmptyListsWithIndex.length} 个舱单的商品列表颜色（按原始舱单序号，奇数舱单红色，偶数舱单黑色）`);
-    } else {
-      // 原有逻辑：按分隔符 ', ' 拆分文本，得到每个商品项（为了向后兼容）
-      // 注意：这个逻辑是按商品项设置颜色，不是按舱单
-      const parts = cellText.split(', ');
-
-      // 如果只有一个部分或没有分隔符，可能所有商品列表都在一个部分中
-      if (parts.length <= 1) {
-        console.log(`单元格 ${cell.address} 只有一个商品列表部分，不设置颜色`);
-        return;
-      }
-
-      // 创建富文本数组
-      const richTextParts = [];
-      parts.forEach((part, index) => {
-        // 判断序号（索引+1）：奇数红色，偶数黑色
-        const isOdd = (index + 1) % 2 === 1;
-        const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
-
-        richTextParts.push({
-          font: { color: { argb: color } },
-          text: part
-        });
-
-        // 添加分隔符（除了最后一个部分）
-        if (index < parts.length - 1) {
-          richTextParts.push({
-            font: { color: { argb: '000000' } }, // 分隔符使用黑色
-            text: ', '
-          });
-        }
-      });
-
-      // 设置单元格值为富文本
-      cell.value = {
-        richText: richTextParts
-      };
-
-      console.log(`单元格 ${cell.address} 设置了 ${parts.length} 个商品项的颜色（奇数红色，偶数黑色）`);
-    }
-  });
-}
-
 // 生成 Word 文档
 async function generateWordDocument(data) {
   const templatePath = path.join(__dirname, '../templates/提单确认件的格式.docx');
@@ -372,16 +223,8 @@ async function generateExcelDocument(data) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 替换文本中的所有占位符实例
-      let newText = text;
-      // 全局替换占位符
-      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPlaceholder, 'g');
-      newText = newText.replace(regex, replacement || '');
-
-      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
-      const isOnlyPlaceholder = text.trim() === placeholder;
-      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -397,7 +240,7 @@ async function generateExcelDocument(data) {
         cell.value = {
           richText: [{
             font: font,
-            text: newText
+            text: replacement || ''
           }]
         };
       }
@@ -623,16 +466,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 替换文本中的所有占位符实例
-      let newText = text;
-      // 全局替换占位符
-      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPlaceholder, 'g');
-      newText = newText.replace(regex, replacement || '');
-
-      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
-      const isOnlyPlaceholder = text.trim() === placeholder;
-      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -648,7 +483,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
         cell.value = {
           richText: [{
             font: font,
-            text: newText
+            text: replacement || ''
           }]
         };
       }
@@ -687,22 +522,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
 
   // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
-
-  // 找到最后一个非空商品列表的索引
-  let lastNonEmptyIndex = -1;
-  for (let j = allCargoData.length - 1; j >= 0; j--) {
-    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
-      lastNonEmptyIndex = j;
-      break;
-    }
-  }
-
-  // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
-  const shouldConvertHS = true;
-
-  // 收集每个舱单的商品列表（不带分隔符），用于颜色设置
-  const cargoGoodsLists = [];
-
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -716,23 +535,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
-      // 添加带HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
-      const goods = cargo.英文品名 || '';
-      let processedGoods = goods;
-      // 如果需要转换HS编码
-      if (shouldConvertHS && goods) {
-        try {
-          processedGoods = await convertGoodsListWithHS(goods);
-        } catch (error) {
-          console.error(`转换商品列表失败（舱单${suffix}），使用默认HS编码:`, error.message);
-          // 失败时使用默认编码
-          const goodsNames = goods.split(',').map(name => name.trim()).filter(name => name.length > 0);
-          processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
-        }
-      }
-      // 保存到数组（不带分隔符），用于颜色设置
-      cargoGoodsLists.push(processedGoods);
-      replacementData[`{带HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -743,10 +545,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
-      // 清空带HS的商品列表占位符
-      replacementData[`{带HS的商品列表${suffix}}`] = '';
-      // 保存空字符串到数组
-      cargoGoodsLists.push('');
     }
   }
 
@@ -756,7 +554,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
-    所有商品列表长度: allCargoData.map(d => d.英文品名 ? d.英文品名.split(',').filter(item => item.trim() !== '').length : 0),
   });
 
   // 处理所有 sheet
@@ -825,9 +622,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
-
-    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
-    applyGoodsListColor(worksheet, '带HS的商品列表', cargoGoodsLists);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -862,16 +656,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   const replacePlaceholder = (cell, placeholder, replacement) => {
     const text = getCellText(cell);
     if (text.includes(placeholder)) {
-      // 替换文本中的所有占位符实例
-      let newText = text;
-      // 全局替换占位符
-      const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedPlaceholder, 'g');
-      newText = newText.replace(regex, replacement || '');
-
-      // 检查替换值是否为数字（整数）并且文本只包含占位符（没有其他内容）
-      const isOnlyPlaceholder = text.trim() === placeholder;
-      if (isOnlyPlaceholder && replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+      // 检查替换值是否为数字（整数）
+      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
         // 设置为数字类型
         cell.value = Number(replacement);
         // 设置数字格式为整数（无小数）
@@ -887,7 +673,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
         cell.value = {
           richText: [{
             font: font,
-            text: newText
+            text: replacement || ''
           }]
         };
       }
@@ -926,22 +712,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
   // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
-
-  // 找到最后一个非空商品列表的索引
-  let lastNonEmptyIndex = -1;
-  for (let j = allCargoData.length - 1; j >= 0; j--) {
-    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
-      lastNonEmptyIndex = j;
-      break;
-    }
-  }
-
-  // 是否转换HS编码：在generateOKBillWithHS中为true，在generateOKBillWithoutHS中为false
-  const shouldConvertHS = false;
-
-  // 收集每个舱单的商品列表（不带分隔符），用于颜色设置
-  const cargoGoodsLists = [];
-
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -955,23 +725,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
-      // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
-      const goods = cargo.英文品名 || '';
-      let processedGoods = goods;
-      // 如果需要转换HS编码
-      if (shouldConvertHS && goods) {
-        try {
-          processedGoods = await convertGoodsListWithHS(goods);
-        } catch (error) {
-          console.error(`转换商品列表失败（舱单${suffix}），使用默认HS编码:`, error.message);
-          // 失败时使用默认编码
-          const goodsNames = goods.split(',').map(name => name.trim()).filter(name => name.length > 0);
-          processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
-        }
-      }
-      // 保存到数组（不带分隔符），用于颜色设置
-      cargoGoodsLists.push(processedGoods);
-      replacementData[`{无HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -982,10 +735,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
-      // 清空无HS的商品列表占位符
-      replacementData[`{无HS的商品列表${suffix}}`] = '';
-      // 保存空字符串到数组
-      cargoGoodsLists.push('');
     }
   }
 
@@ -995,7 +744,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
-    所有商品列表长度: allCargoData.map(d => d.英文品名 ? d.英文品名.split(',').filter(item => item.trim() !== '').length : 0),
   });
 
   // 处理所有 sheet
@@ -1064,9 +812,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
-
-    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
-    applyGoodsListColor(worksheet, '无HS的商品列表', cargoGoodsLists);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -1238,5 +983,3 @@ module.exports.generateExcelDocument = generateExcelDocument;
 module.exports.generateCombinedLetter = generateCombinedLetter;
 module.exports.generateOKBillWithHS = generateOKBillWithHS;
 module.exports.generateOKBillWithoutHS = generateOKBillWithoutHS;
-module.exports.bufferToBase64 = bufferToBase64;
-module.exports.parseFormData = parseFormData;

@@ -4,21 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>舱单文件处理系统</title>
-  <script src="https://unpkg.com/tailwindcss@3.4.1/dist/tailwind.min.js"></script>
-  <script>
-    // 加载 Lucide icons 并在加载完成后初始化
-    (function() {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/lucide@0.436.0/dist/umd/lucide.min.js';
-      script.onload = function() {
-        // Lucide 加载完成后初始化图标
-        if (window.lucide && typeof lucide.createIcons === 'function') {
-          lucide.createIcons();
-        }
-      };
-      document.head.appendChild(script);
-    })();
-  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     body {
       background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f3e8ff 100%);
@@ -131,14 +118,8 @@
   </div>
 
   <script>
-    // 安全初始化lucide图标
-    function initLucideIcons() {
-      if (window.lucide && typeof lucide.createIcons === 'function') {
-        lucide.createIcons();
-        return true;
-      }
-      return false;
-    }
+    // 初始化图标
+    lucide.createIcons();
 
     let selectedFiles = [];
     let zipFileBase64 = null;
@@ -219,13 +200,13 @@
       processBtn.disabled = false;
       error.classList.add('hidden');
       downloadArea.classList.add('hidden');
-      initLucideIcons();
+      lucide.createIcons();
     }
 
     function showError(message) {
       errorMsg.textContent = message;
       error.classList.remove('hidden');
-      initLucideIcons();
+      lucide.createIcons();
     }
 
     async function processFile() {
@@ -263,7 +244,7 @@
             processedCount.textContent = `已处理 ${result.fileCount || selectedFiles.length} 个文件`;
           }
           downloadArea.classList.remove('hidden');
-          initLucideIcons();
+          lucide.createIcons();
         } else {
           showError(result.message || '处理失败');
         }

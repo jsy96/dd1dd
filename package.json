@@ -5,10 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node dev-server.js",
-    "dev:local": "node dev-server.js",
-    "vercel": "vercel dev",
-    "build": "echo 'No build step required for Vercel deployment'"
+    "dev": "node server.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",
