@@ -360,8 +360,8 @@ async function generateCombinedLetter(firstData, allCargoData) {
     if (i < allCargoData.length) {
       const cargo = allCargoData[i];
       const billNumber = cargo.提单号 || '';
-      // 对于提单号2及以上，如果提单号为空，设置字段为空字符串（清空整行）
-      if (suffix >= 2 && billNumber === '') {
+      // 如果提单号为空，设置字段为空字符串（清空整行）
+      if (billNumber === '') {
         containerData[`提单号${suffix}`] = '';
         containerData[`箱号${suffix}`] = '';
         containerData[`箱型${suffix}`] = '';
@@ -378,7 +378,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`件数${suffix}`] = safeToInt(cargo.件数);
         containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
         containerData[`体积${suffix}`] = safeToInt(cargo.体积);
-        // 所有并单号字段的值都等于第一个舱单的提单号
+        // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号
         containerData[`并单号${suffix}`] = firstData.提单号 || '';
       }
     } else {
