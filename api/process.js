@@ -40,36 +40,7 @@ function parseManifestExcel(buffer) {
     毛重: getCellValue(20, 8),
     体积: getCellValue(20, 9),
     唛头: getCellValue(20, 10),
-    发货人名称: getCellValue(27, 2),
-    发货人地址: getCellValue(28, 2),
-    发货人电话: getCellValue(30, 2),
-    收货人名称: getCellValue(34, 2),
-    收货人地址: getCellValue(35, 2),
-    收货人电话: getCellValue(37, 2),
-    收货人联系人: getCellValue(39, 2),
-    通知人名称: getCellValue(43, 2),
-    通知人地址: getCellValue(44, 2),
-    通知人电话: getCellValue(46, 2),
   };
-
-  data.发货人 = [
-    data.发货人名称,
-    data.发货人地址,
-    `TEL: ${data.发货人电话}`
-  ].filter(Boolean).join('\n');
-
-  data.收货人 = [
-    data.收货人名称,
-    data.收货人地址,
-    `TEL: ${data.收货人电话}`,
-    data.收货人联系人 ? `Contact: ${data.收货人联系人}` : ''
-  ].filter(Boolean).join('\n');
-
-  data.通知人 = [
-    data.通知人名称,
-    data.通知人地址,
-    `TEL: ${data.通知人电话}`
-  ].filter(Boolean).join('\n');
 
   // 调试日志
   console.log('DEBUG parseManifestExcel: 英文品名原始值:', JSON.stringify(data.英文品名));
@@ -217,18 +188,6 @@ async function generateWordDocument(data) {
     件数: safeToInt(data.件数),
     毛重: safeToInt(data.毛重),
     体积: safeToInt(data.体积),
-    公司名: data.发货人名称,
-    公司地址: data.发货人地址,
-    电话: data.发货人电话,
-    传真: '',
-    电子邮箱: '',
-    许可证号: '',
-    收货地址: data.收货人地址,
-    邮编: '',
-    手机号: '',
-    电话号码: data.收货人电话,
-    姓名: data.通知人名称,
-    地址: data.通知人地址,
     ...goodsData,
   });
 
@@ -464,18 +423,6 @@ async function generateCombinedLetter(firstData, allCargoData) {
     件数: safeToInt(firstData.件数),
     毛重: safeToInt(firstData.毛重),
     体积: safeToInt(firstData.体积),
-    公司名: firstData.发货人名称,
-    公司地址: firstData.发货人地址,
-    电话: firstData.发货人电话,
-    传真: '',
-    电子邮箱: '',
-    许可证号: '',
-    收货地址: firstData.收货人地址,
-    邮编: '',
-    手机号: '',
-    电话号码: firstData.收货人电话,
-    姓名: firstData.通知人名称,
-    地址: firstData.通知人地址,
     并单号: firstData.提单号, // 新增并单号占位符
     ...goodsData,
     ...containerData,
@@ -559,15 +506,6 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     '{件数}': safeToInt(firstData.件数),
     '{毛重}': safeToInt(firstData.毛重),
     '{体积}': safeToInt(firstData.体积),
-    '{发货人名称}': firstData.发货人名称 || '',
-    '{发货人地址}': firstData.发货人地址 || '',
-    '{发货人电话}': firstData.发货人电话 || '',
-    '{收货人名称}': firstData.收货人名称 || '',
-    '{收货人地址}': firstData.收货人地址 || '',
-    '{收货人电话}': firstData.收货人电话 || '',
-    '{通知人名称}': firstData.通知人名称 || '',
-    '{通知人地址}': firstData.通知人地址 || '',
-    '{通知人电话}': firstData.通知人电话 || '',
     '{并单号}': firstData.提单号 || '', // 新增并单号占位符
   };
 
@@ -755,15 +693,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     '{件数}': safeToInt(firstData.件数),
     '{毛重}': safeToInt(firstData.毛重),
     '{体积}': safeToInt(firstData.体积),
-    '{发货人名称}': firstData.发货人名称 || '',
-    '{发货人地址}': firstData.发货人地址 || '',
-    '{发货人电话}': firstData.发货人电话 || '',
-    '{收货人名称}': firstData.收货人名称 || '',
-    '{收货人地址}': firstData.收货人地址 || '',
-    '{收货人电话}': firstData.收货人电话 || '',
-    '{通知人名称}': firstData.通知人名称 || '',
-    '{通知人地址}': firstData.通知人地址 || '',
-    '{通知人电话}': firstData.通知人电话 || '',
     '{并单号}': firstData.提单号 || '', // 新增并单号占位符
   };
 
