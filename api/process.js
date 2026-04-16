@@ -652,36 +652,36 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
 
-      console.log(`总提单OK件（带HS）D13单元格原始片段数: ${originalRichText.length}`);
+      console.log(`总提单OK件（带HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
-      console.log(`总提单OK件（带HS）商品列表内容:`, JSON.stringify(cargoListsWithHS));
 
-      // 策略：为每个舱单的商品列表创建一个独立的富文本片段
-      // 使用对应原始片段的格式（奇数红色，偶数黑色）
+      // 创建新的富文本，为每个舱单分配一个片段
       const newRichText = [];
 
-      for (let i = 0; i < originalRichText.length; i++) {
-        const originalRt = originalRichText[i];
+      for (let i = 0; i < 7; i++) {
+        if (i < originalRichText.length) {
+          const originalRt = originalRichText[i];
 
-        if (i < cargoListsWithHS.length) {
-          // 有数据的舱单，使用实际商品列表
-          newRichText.push({
-            font: originalRt.font,
-            text: cargoListsWithHS[i]
-          });
-          console.log(`总提单OK件（带HS）片段${i + 1}: 颜色=${originalRt.font.color.argb}, 内容="${cargoListsWithHS[i]}"`);
-        } else {
-          // 没有数据的舱单，添加空字符串（保留片段结构）
-          newRichText.push({
-            font: originalRt.font,
-            text: ''
-          });
-          console.log(`总提单OK件（带HS）片段${i + 1}: 颜色=${originalRt.font.color.argb}, 内容="(空)"`);
+          if (i < cargoListsWithHS.length) {
+            // 有数据的舱单
+            newRichText.push({
+              font: originalRt.font,
+              text: cargoListsWithHS[i]
+            });
+            console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoListsWithHS[i]}" (颜色: ${originalRt.font.color.argb})`);
+          } else {
+            // 无数据的舱单
+            newRichText.push({
+              font: originalRt.font,
+              text: ''
+            });
+            console.log(`总提单OK件（带HS）片段${i + 1}: "(空)"`);
+          }
         }
       }
 
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（带HS）: D13单元格已更新，共 ${newRichText.length} 个片段`);
+      console.log(`总提单OK件（带HS）D13单元格已设置 ${newRichText.length} 个片段`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
@@ -898,36 +898,36 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
 
-      console.log(`总提单OK件（无HS）D13单元格原始片段数: ${originalRichText.length}`);
+      console.log(`总提单OK件（无HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
-      console.log(`总提单OK件（无HS）商品列表内容:`, JSON.stringify(cargoListsWithoutHS));
 
-      // 策略：为每个舱单的商品列表创建一个独立的富文本片段
-      // 使用对应原始片段的格式（奇数红色，偶数黑色）
+      // 创建新的富文本，为每个舱单分配一个片段
       const newRichText = [];
 
-      for (let i = 0; i < originalRichText.length; i++) {
-        const originalRt = originalRichText[i];
+      for (let i = 0; i < 7; i++) {
+        if (i < originalRichText.length) {
+          const originalRt = originalRichText[i];
 
-        if (i < cargoListsWithoutHS.length) {
-          // 有数据的舱单，使用实际商品列表
-          newRichText.push({
-            font: originalRt.font,
-            text: cargoListsWithoutHS[i]
-          });
-          console.log(`总提单OK件（无HS）片段${i + 1}: 颜色=${originalRt.font.color.argb}, 内容="${cargoListsWithoutHS[i]}"`);
-        } else {
-          // 没有数据的舱单，添加空字符串（保留片段结构）
-          newRichText.push({
-            font: originalRt.font,
-            text: ''
-          });
-          console.log(`总提单OK件（无HS）片段${i + 1}: 颜色=${originalRt.font.color.argb}, 内容="(空)"`);
+          if (i < cargoListsWithoutHS.length) {
+            // 有数据的舱单
+            newRichText.push({
+              font: originalRt.font,
+              text: cargoListsWithoutHS[i]
+            });
+            console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoListsWithoutHS[i]}" (颜色: ${originalRt.font.color.argb})`);
+          } else {
+            // 无数据的舱单
+            newRichText.push({
+              font: originalRt.font,
+              text: ''
+            });
+            console.log(`总提单OK件（无HS）片段${i + 1}: "(空)"`);
+          }
         }
       }
 
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（无HS）: D13单元格已更新，共 ${newRichText.length} 个片段`);
+      console.log(`总提单OK件（无HS）D13单元格已设置 ${newRichText.length} 个片段`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
