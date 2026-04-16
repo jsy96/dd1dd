@@ -4,6 +4,11 @@
  * 输出：每个英文品名后加空格和8位HS编码，逗号分隔的字符串
  * HS编码来自飞书多维表格，如果不存在则添加新记录（HS编码填充为12345678）
  *
+ * 注意：
+ * 1. HS编码字段应为文本类型，存储8位字符（可以是数字或包含前导0）
+ * 2. 查询时会自动将商品名称转换为大写，以匹配表格中的格式
+ * 3. 需要配置有效的飞书应用凭证（FEISHU_APP_ID和FEISHU_APP_SECRET环境变量）
+ *
  * 使用说明：
  * 1. 需要先配置飞书多维表格链接（直接链接或appToken和tableId）
  * 2. 可以通过以下方式使用：
@@ -177,17 +182,14 @@ async function ensureAccessToken() {
     const appSecret = process.env.FEISHU_APP_SECRET;
 
     if (!appId || !appSecret) {
-      console.warn('飞书应用配置未设置，将使用模拟查询模式');
-      console.warn('请设置FEISHU_APP_ID和FEISHU_APP_SECRET环境变量以启用真实的飞书API查询');
-      return null;
+      throw new Error('飞书应用配置未设置，请设置FEISHU_APP_ID和FEISHU_APP_SECRET环境变量');
     }
 
     cachedAccessToken = await getFeishuAccessToken(appId, appSecret);
     return cachedAccessToken;
   } catch (error) {
     console.error('获取飞书访问令牌失败:', error.message);
-    console.warn('将使用模拟查询模式');
-    return null;
+    throw error;
   } finally {
     tokenFetching = false;
   }
@@ -202,15 +204,10 @@ async function ensureAccessToken() {
  * @returns {Promise<object|null>} 记录数据，如果不存在返回 null
  */
 async function queryFeishuRecord(appToken, tableId, fieldName, value) {
-  // 首先尝试使用真实的飞书API
-  const accessToken = await ensureAccessToken();
+  // 将查询值转换为大写，以匹配表格中的数据格式
+  const upperValue = value.toUpperCase().trim();
 
-  if (!accessToken) {
-    // 如果没有有效的访问令牌，使用模拟查询
-    console.log(`模拟查询: ${fieldName} = "${value}"`);
-    console.log(`实际应执行: lark-cli base list-records ${appToken} ${tableId} --filter '${fieldName}="${value}"' --output json`);
-    return null;
-  }
+  const accessToken = await ensureAccessToken();
 
   try {
     // 构建飞书API查询URL
@@ -220,7 +217,7 @@ async function queryFeishuRecord(appToken, tableId, fieldName, value) {
         {
           field: fieldName,
           operator: 'is',
-          value: [value]
+          value: [upperValue]
         }
       ]
     });
@@ -239,20 +236,18 @@ async function queryFeishuRecord(appToken, tableId, fieldName, value) {
     if (response.data && response.data.items && response.data.items.length > 0) {
       // 返回第一个匹配的记录
       const record = response.data.items[0];
-      console.log(`飞书API查询成功: ${fieldName} = "${value}"，找到记录`);
+      console.log(`飞书API查询成功: ${fieldName} = "${upperValue}"，找到记录`);
       return {
         record_id: record.record_id,
         fields: record.fields
       };
     } else {
-      console.log(`飞书API查询: ${fieldName} = "${value}"，未找到记录`);
+      console.log(`飞书API查询: ${fieldName} = "${upperValue}"，未找到记录`);
       return null;
     }
   } catch (error) {
-    console.error(`飞书API查询失败: ${fieldName} = "${value}"`, error.message);
-    // 失败时使用模拟查询
-    console.log(`使用模拟查询: ${fieldName} = "${value}"`);
-    return null;
+    console.error(`飞书API查询失败: ${fieldName} = "${upperValue}"`, error.message);
+    throw error;
   }
 }
 
@@ -264,16 +259,7 @@ async function queryFeishuRecord(appToken, tableId, fieldName, value) {
  * @returns {Promise<object>} 新创建的记录
  */
 async function createFeishuRecord(appToken, tableId, fields) {
-  // 首先尝试使用真实的飞书API
   const accessToken = await ensureAccessToken();
-
-  if (!accessToken) {
-    // 如果没有有效的访问令牌，使用模拟创建
-    const fieldsJson = JSON.stringify(fields);
-    console.log(`模拟创建记录: ${fieldsJson}`);
-    console.log(`实际应执行: lark-cli base create-record ${appToken} ${tableId} --fields '${fieldsJson}' --output json`);
-    return { record_id: 'mock_record_id', fields: fields };
-  }
 
   try {
     const response = await httpRequest(
@@ -299,9 +285,7 @@ async function createFeishuRecord(appToken, tableId, fields) {
     }
   } catch (error) {
     console.error(`飞书API创建记录失败:`, error.message);
-    // 失败时使用模拟创建
-    console.log(`使用模拟创建记录: ${JSON.stringify(fields)}`);
-    return { record_id: 'mock_record_id', fields: fields };
+    throw error;
   }
 }
 
@@ -313,22 +297,25 @@ async function createFeishuRecord(appToken, tableId, fields) {
  * @returns {Promise<string>} 8位HS编码
  */
 async function getOrCreateHSCode(goodsName, appToken, tableId) {
+  // 确保商品名称为大写
+  const upperGoodsName = goodsName.toUpperCase().trim();
+
   // 查询是否存在该商品
-  const record = await queryFeishuRecord(appToken, tableId, '英文品名', goodsName);
+  const record = await queryFeishuRecord(appToken, tableId, '英文品名', upperGoodsName);
   if (record) {
     // 从记录中提取HS编码字段
     const hsCode = record.fields['HS编码'] || record.fields['hs_code'] || '';
     if (hsCode && hsCode.toString().length === 8) {
       return hsCode.toString();
     } else {
-      console.warn(`商品"${goodsName}"的HS编码格式不正确: ${hsCode}，使用默认值12345678`);
+      console.warn(`商品"${upperGoodsName}"的HS编码格式不正确: ${hsCode}，使用默认值12345678`);
       return '12345678';
     }
   } else {
     // 创建新记录
-    console.log(`商品"${goodsName}"不存在于飞书多维表格中，添加新记录...`);
+    console.log(`商品"${upperGoodsName}"不存在于飞书多维表格中，添加新记录...`);
     const fields = {
-      '英文品名': goodsName,
+      '英文品名': upperGoodsName,
       'HS编码': '12345678'
     };
     const newRecord = await createFeishuRecord(appToken, tableId, fields);
@@ -392,6 +379,9 @@ function getWorkflowInstructions(goodsListWithoutHS, feishuUrl) {
     .map(name => name.trim())
     .filter(name => name.length > 0);
 
+  // 创建大写的商品名称数组用于查询（表格中商品名称为大写）
+  const upperGoodsNames = goodsNames.map(name => name.toUpperCase());
+
   let instructions = `# HS编码转换工作流程\n\n`;
 
   if (parsedUrl.isWikiLink) {
@@ -412,9 +402,10 @@ function getWorkflowInstructions(goodsListWithoutHS, feishuUrl) {
   }
 
   goodsNames.forEach((name, index) => {
-    instructions += `${index + 1}. ${name}\n`;
+    instructions += `${index + 1}. ${name} (查询时将转换为: ${upperGoodsNames[index]})\n`;
   });
 
+  instructions += `\n注意：表格中的商品名称为大写格式，查询时会自动转换为大写。\n`;
   instructions += `\n## 操作步骤:\n\n`;
 
   if (parsedUrl.isWikiLink) {
@@ -425,26 +416,30 @@ function getWorkflowInstructions(goodsListWithoutHS, feishuUrl) {
 
     instructions += `### 2. 查询现有记录\n`;
     goodsNames.forEach((name, index) => {
-      instructions += `商品${index + 1} "${name}":\n`;
-      instructions += `\`lark-cli base list-records bas_xxx ${parsedUrl.tableId} --filter '英文品名="${name}"' --output json\`\n\n`;
+      const upperName = upperGoodsNames[index];
+      instructions += `商品${index + 1} "${name}" (查询名称: "${upperName}"):\n`;
+      instructions += `\`lark-cli base list-records bas_xxx ${parsedUrl.tableId} --filter '英文品名="${upperName}"' --output json\`\n\n`;
     });
 
     instructions += `### 3. 创建不存在的记录\n`;
     instructions += `对于查询不到的商品，使用以下命令创建（HS编码为12345678）：\n`;
-    instructions += `\`lark-cli base create-record bas_xxx ${parsedUrl.tableId} --fields '{"英文品名":"商品名称","HS编码":"12345678"}' --output json\`\n\n`;
+    instructions += `\`lark-cli base create-record bas_xxx ${parsedUrl.tableId} --fields '{"英文品名":"商品名称","HS编码":"12345678"}' --output json\`\n`;
+    instructions += `注意：将"商品名称"替换为大写的商品英文名称。\n\n`;
   } else {
     // 直接Base链接
     const { appToken, tableId } = parsedUrl;
 
     instructions += `### 1. 查询现有记录\n`;
     goodsNames.forEach((name, index) => {
-      instructions += `商品${index + 1} "${name}":\n`;
-      instructions += `\`lark-cli base list-records ${appToken} ${tableId} --filter '英文品名="${name}"' --output json\`\n\n`;
+      const upperName = upperGoodsNames[index];
+      instructions += `商品${index + 1} "${name}" (查询名称: "${upperName}"):\n`;
+      instructions += `\`lark-cli base list-records ${appToken} ${tableId} --filter '英文品名="${upperName}"' --output json\`\n\n`;
     });
 
     instructions += `### 2. 创建不存在的记录\n`;
     instructions += `对于查询不到的商品，使用以下命令创建（HS编码为12345678）：\n`;
-    instructions += `\`lark-cli base create-record ${appToken} ${tableId} --fields '{"英文品名":"商品名称","HS编码":"12345678"}' --output json\`\n\n`;
+    instructions += `\`lark-cli base create-record ${appToken} ${tableId} --fields '{"英文品名":"商品名称","HS编码":"12345678"}' --output json\`\n`;
+    instructions += `注意：将"商品名称"替换为大写的商品英文名称。\n\n`;
   }
 
   // 结果组装
@@ -487,6 +482,9 @@ HS编码转换工具
 注意事项:
 - 需要先安装并配置 lark-cli 或使用 Claude Code 中的 lark-base 技能
 - 飞书多维表格中应有"英文品名"和"HS编码"字段（或相应字段名）
+- HS编码字段应为文本类型，存储8位字符
+- 查询时会自动将商品名称转换为大写进行匹配
 - 如果商品不存在，会自动创建新记录，HS编码为12345678
+- 需要设置有效的FEISHU_APP_ID和FEISHU_APP_SECRET环境变量
 `);
 }
