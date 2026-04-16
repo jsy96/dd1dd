@@ -187,8 +187,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`健康检查: http://localhost:${PORT}/api/health`);
   console.log(`模板文件: http://localhost:${PORT}/api/templates`);
   console.log(`\n注意：此服务器仅用于本地测试，生产环境请使用Vercel部署。`);
-  console.log(`环境变量检查:`);
-  console.log(`  - FEISHU_APP_ID: ${process.env.FEISHU_APP_ID ? '已设置' : '未设置'}`);
-  console.log(`  - FEISHU_APP_SECRET: ${process.env.FEISHU_APP_SECRET ? '已设置' : '未设置'}`);
-  console.log(`  - FEISHU_BASE_URL: ${process.env.FEISHU_BASE_URL ? '已设置' : '未设置'}`);
 });
