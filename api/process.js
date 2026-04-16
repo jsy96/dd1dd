@@ -538,6 +538,16 @@ async function generateOKBillWithHS(firstData, allCargoData) {
 
   // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
+
+  // 找到最后一个非空商品列表的索引
+  let lastNonEmptyIndex = -1;
+  for (let j = allCargoData.length - 1; j >= 0; j--) {
+    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
+      lastNonEmptyIndex = j;
+      break;
+    }
+  }
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -551,8 +561,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
-      // 添加无HS的商品列表占位符
-      replacementData[`{无HS的商品列表${suffix}}`] = cargo.英文品名 || '';
+      // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
+      const goods = cargo.英文品名 || '';
+      replacementData[`{无HS的商品列表${suffix}}`] = goods + (goods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -741,6 +752,16 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
   // 添加所有舱单字段映射：提单号1, 箱号1, 箱型1, 封号1, 件数1, 毛重1, 体积1, 并单号1, ...
   const maxContainers = 20; // 假设模板最多支持20个舱单
+
+  // 找到最后一个非空商品列表的索引
+  let lastNonEmptyIndex = -1;
+  for (let j = allCargoData.length - 1; j >= 0; j--) {
+    if (allCargoData[j].英文品名 && allCargoData[j].英文品名.trim() !== '') {
+      lastNonEmptyIndex = j;
+      break;
+    }
+  }
+
   for (let i = 0; i < maxContainers; i++) {
     const suffix = i + 1;
     if (i < allCargoData.length) {
@@ -754,8 +775,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
-      // 添加无HS的商品列表占位符
-      replacementData[`{无HS的商品列表${suffix}}`] = cargo.英文品名 || '';
+      // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
+      const goods = cargo.英文品名 || '';
+      replacementData[`{无HS的商品列表${suffix}}`] = goods + (goods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
