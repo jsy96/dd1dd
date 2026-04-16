@@ -535,6 +535,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
+      // 添加无HS的商品列表占位符
+      replacementData[`{无HS的商品列表${suffix}}`] = cargo.英文品名 || '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -545,6 +547,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
+      // 清空无HS的商品列表占位符
+      replacementData[`{无HS的商品列表${suffix}}`] = '';
     }
   }
 
@@ -554,6 +558,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
+    所有商品列表长度: allCargoData.map(d => d.英文品名 ? d.英文品名.split(',').filter(item => item.trim() !== '').length : 0),
   });
 
   // 处理所有 sheet
@@ -725,6 +730,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
+      // 添加无HS的商品列表占位符
+      replacementData[`{无HS的商品列表${suffix}}`] = cargo.英文品名 || '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -735,6 +742,8 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
+      // 清空无HS的商品列表占位符
+      replacementData[`{无HS的商品列表${suffix}}`] = '';
     }
   }
 
@@ -744,6 +753,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
+    所有商品列表长度: allCargoData.map(d => d.英文品名 ? d.英文品名.split(',').filter(item => item.trim() !== '').length : 0),
   });
 
   // 处理所有 sheet
