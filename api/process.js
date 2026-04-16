@@ -16,6 +16,9 @@ try {
   console.log('HS编码转换模块加载失败，将使用默认HS编码:', error.message);
 }
 
+// 默认的飞书多维表格链接（用户提供的HS码数据源）
+const DEFAULT_FEISHU_BASE_URL = 'https://my.feishu.cn/base/OoNybRydGaN6Wwspy41cnQQCnGe?table=tbl2uWivrvboRe2a&view=vewu1hH18v';
+
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -83,9 +86,12 @@ async function convertGoodsListWithHS(goodsListWithoutHS) {
     return '';
   }
 
+  // 确定要使用的飞书链接：优先使用环境变量，否则使用默认链接
+  const feishuBaseUrl = process.env.FEISHU_BASE_URL || DEFAULT_FEISHU_BASE_URL;
+
   // 如果HS编码转换模块不可用，使用默认HS编码
-  if (!hsEncoder || !process.env.FEISHU_BASE_URL) {
-    console.log('HS编码转换: 使用默认HS编码12345678');
+  if (!hsEncoder) {
+    console.log('HS编码转换: HS编码转换模块不可用，使用默认HS编码12345678');
     const goodsNames = goodsListWithoutHS.split(',')
       .map(name => name.trim())
       .filter(name => name.length > 0);
@@ -94,8 +100,9 @@ async function convertGoodsListWithHS(goodsListWithoutHS) {
 
   try {
     console.log(`HS编码转换: 开始转换商品列表: ${goodsListWithoutHS.substring(0, 100)}...`);
+    console.log(`HS编码转换: 使用飞书链接: ${feishuBaseUrl.substring(0, 50)}...`);
     const result = await hsEncoder.addHSCodes(goodsListWithoutHS, {
-      feishuBaseUrl: process.env.FEISHU_BASE_URL
+      feishuBaseUrl: feishuBaseUrl
     });
     console.log(`HS编码转换: 转换完成，结果: ${result.substring(0, 100)}...`);
     return result;
