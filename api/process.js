@@ -476,6 +476,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
     电话号码: firstData.收货人电话,
     姓名: firstData.通知人名称,
     地址: firstData.通知人地址,
+    并单号: firstData.提单号, // 新增并单号占位符
     ...goodsData,
     ...containerData,
   });
@@ -567,6 +568,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     '{通知人名称}': firstData.通知人名称 || '',
     '{通知人地址}': firstData.通知人地址 || '',
     '{通知人电话}': firstData.通知人电话 || '',
+    '{并单号}': firstData.提单号 || '', // 新增并单号占位符
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
@@ -762,6 +764,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     '{通知人名称}': firstData.通知人名称 || '',
     '{通知人地址}': firstData.通知人地址 || '',
     '{通知人电话}': firstData.通知人电话 || '',
+    '{并单号}': firstData.提单号 || '', // 新增并单号占位符
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
