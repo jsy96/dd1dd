@@ -191,9 +191,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  - FEISHU_APP_ID: ${process.env.FEISHU_APP_ID ? '已设置' : '未设置'}`);
   console.log(`  - FEISHU_APP_SECRET: ${process.env.FEISHU_APP_SECRET ? '已设置' : '未设置'}`);
   console.log(`  - FEISHU_BASE_URL: ${process.env.FEISHU_BASE_URL ? '已设置' : '未设置'}`);
-
-  if (!process.env.FEISHU_APP_ID || !process.env.FEISHU_APP_SECRET) {
-    console.log(`\n警告：飞书应用凭证未设置，HS编码查询功能可能无法正常工作。`);
-    console.log(`请设置环境变量或创建 .env 文件（参考 .env.example）。`);
-  }
 });
