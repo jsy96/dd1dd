@@ -652,19 +652,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
 
-      // 为每个舱单生成替换映射（确保生成所有7个占位符）
-      const replacementMap = {};
-      for (let i = 1; i <= 7; i++) {
-        if (i <= cargoListsWithHS.length) {
-          replacementMap[`{带HS的商品列表${i}}`] = cargoListsWithHS[i - 1];
-        } else {
-          replacementMap[`{带HS的商品列表${i}}`] = ''; // 超出舱单数量的留空
-        }
-      }
-
-      console.log(`总提单OK件（带HS）替换映射:`, JSON.stringify(replacementMap));
-
-      // 合并所有片段的文本，执行替换，然后重新分配到片段中
+      // 合并所有片段的文本
       let fullText = '';
       for (const rt of originalRichText) {
         fullText += rt.text;
@@ -672,36 +660,42 @@ async function generateOKBillWithHS(firstData, allCargoData) {
 
       // 执行替换
       let replacedText = fullText;
-      for (const [placeholder, replacement] of Object.entries(replacementMap)) {
+      for (let i = 1; i <= 7; i++) {
+        const placeholder = `{带HS的商品列表${i}}`;
+        const replacement = (i <= cargoListsWithHS.length) ? cargoListsWithHS[i - 1] : '';
         replacedText = replacedText.split(placeholder).join(replacement);
       }
 
-      // 重新分配到原始片段中，保留原始格式
-      let textIndex = 0;
-      const newRichText = [];
-      for (const rt of originalRichText) {
-        const originalLength = rt.text.length;
-        // 从替换后的文本中取相应长度的片段
-        const newText = replacedText.substr(textIndex, originalLength);
-        newRichText.push({
-          font: rt.font,
-          text: newText
-        });
-        textIndex += originalLength;
-      }
+      console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
+      console.log(`总提单OK件（带HS）商品列表内容:`, JSON.stringify(cargoListsWithHS));
+      console.log(`总提单OK件（带HS）替换后文本: ${replacedText}`);
 
-      // 如果替换后的文本更长，添加剩余片段
-      if (textIndex < replacedText.length) {
-        const lastRt = originalRichText[originalRichText.length - 1];
-        newRichText.push({
-          font: lastRt.font,
-          text: replacedText.substr(textIndex)
-        });
+      // 将替换后的文本按照原始片段的格式逐个字符分配
+      // 尽量保持原始的格式模式
+      const newRichText = [];
+      let textIndex = 0;
+
+      // 策略：为每个舱单的商品列表创建一个片段，使用对应原始片段的格式
+      for (let i = 0; i < originalRichText.length && i < 7; i++) {
+        const originalRt = originalRichText[i];
+
+        if (i < cargoListsWithHS.length) {
+          // 有数据的舱单，使用实际商品列表
+          newRichText.push({
+            font: originalRt.font,
+            text: cargoListsWithHS[i]
+          });
+        } else {
+          // 没有数据的舱单，添加空字符串
+          newRichText.push({
+            font: originalRt.font,
+            text: ''
+          });
+        }
       }
 
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（带HS）: 已替换D13单元格中的 ${Object.keys(replacementMap).length} 个商品列表占位符`);
-      console.log(`总提单OK件（带HS）原始文本长度: ${fullText.length}, 替换后文本长度: ${replacedText.length}`);
+      console.log(`总提单OK件（带HS）: 已替换D13单元格中的 ${cargoListsWithHS.length} 个商品列表占位符`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
@@ -918,56 +912,31 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     if (goodsListCell.value && goodsListCell.value.richText) {
       const originalRichText = goodsListCell.value.richText;
 
-      // 为每个舱单生成替换映射（确保生成所有7个占位符）
-      const replacementMap = {};
-      for (let i = 1; i <= 7; i++) {
-        if (i <= cargoListsWithoutHS.length) {
-          replacementMap[`{无HS的商品列表${i}}`] = cargoListsWithoutHS[i - 1];
+      console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
+      console.log(`总提单OK件（无HS）商品列表内容:`, JSON.stringify(cargoListsWithoutHS));
+
+      // 策略：为每个舱单的商品列表创建一个片段，使用对应原始片段的格式
+      const newRichText = [];
+      for (let i = 0; i < originalRichText.length && i < 7; i++) {
+        const originalRt = originalRichText[i];
+
+        if (i < cargoListsWithoutHS.length) {
+          // 有数据的舱单，使用实际商品列表
+          newRichText.push({
+            font: originalRt.font,
+            text: cargoListsWithoutHS[i]
+          });
         } else {
-          replacementMap[`{无HS的商品列表${i}}`] = ''; // 超出舱单数量的留空
+          // 没有数据的舱单，添加空字符串
+          newRichText.push({
+            font: originalRt.font,
+            text: ''
+          });
         }
       }
 
-      console.log(`总提单OK件（无HS）替换映射:`, JSON.stringify(replacementMap));
-
-      // 合并所有片段的文本，执行替换，然后重新分配到片段中
-      let fullText = '';
-      for (const rt of originalRichText) {
-        fullText += rt.text;
-      }
-
-      // 执行替换
-      let replacedText = fullText;
-      for (const [placeholder, replacement] of Object.entries(replacementMap)) {
-        replacedText = replacedText.split(placeholder).join(replacement);
-      }
-
-      // 重新分配到原始片段中，保留原始格式
-      let textIndex = 0;
-      const newRichText = [];
-      for (const rt of originalRichText) {
-        const originalLength = rt.text.length;
-        // 从替换后的文本中取相应长度的片段
-        const newText = replacedText.substr(textIndex, originalLength);
-        newRichText.push({
-          font: rt.font,
-          text: newText
-        });
-        textIndex += originalLength;
-      }
-
-      // 如果替换后的文本更长，添加剩余片段
-      if (textIndex < replacedText.length) {
-        const lastRt = originalRichText[originalRichText.length - 1];
-        newRichText.push({
-          font: lastRt.font,
-          text: replacedText.substr(textIndex)
-        });
-      }
-
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（无HS）: 已替换D13单元格中的 ${Object.keys(replacementMap).length} 个商品列表占位符`);
-      console.log(`总提单OK件（无HS）原始文本长度: ${fullText.length}, 替换后文本长度: ${replacedText.length}`);
+      console.log(`总提单OK件（无HS）: 已替换D13单元格中的 ${cargoListsWithoutHS.length} 个商品列表占位符`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
