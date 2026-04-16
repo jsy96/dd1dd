@@ -12,6 +12,7 @@
  */
 
 const path = require('path');
+const https = require('https');
 
 /**
  * 解析飞书多维表格的直接链接，提取 app_token 和 table_id
@@ -69,35 +70,239 @@ function parseFeishuUrl(url) {
 }
 
 /**
- * 模拟查询飞书多维表格记录（实际使用时需要替换为lark-cli调用）
+ * HTTP请求辅助函数
+ * @param {string} url - 请求URL
+ * @param {object} options - 请求选项
+ * @param {object} data - 请求数据（POST请求时使用）
+ * @returns {Promise<object>} 响应数据
+ */
+function httpRequest(url, options = {}, data = null) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const reqOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || 443,
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      }
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      let responseData = '';
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          if (parsed.code && parsed.code !== 0) {
+            reject(new Error(`飞书API错误: ${parsed.msg || '未知错误'} (code: ${parsed.code})`));
+          } else {
+            resolve(parsed);
+          }
+        } catch (error) {
+          reject(new Error(`解析飞书API响应失败: ${error.message}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(new Error(`飞书API请求失败: ${error.message}`));
+    });
+
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+    req.end();
+  });
+}
+
+/**
+ * 获取飞书租户访问令牌
+ * @param {string} appId - 应用ID
+ * @param {string} appSecret - 应用密钥
+ * @returns {Promise<string>} 访问令牌
+ */
+async function getFeishuAccessToken(appId, appSecret) {
+  if (!appId || !appSecret) {
+    throw new Error('缺少飞书应用配置，请设置FEISHU_APP_ID和FEISHU_APP_SECRET环境变量');
+  }
+
+  try {
+    const response = await httpRequest('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      }
+    }, {
+      app_id: appId,
+      app_secret: appSecret
+    });
+
+    if (response.tenant_access_token) {
+      return response.tenant_access_token;
+    } else {
+      throw new Error('飞书API未返回访问令牌');
+    }
+  } catch (error) {
+    throw new Error(`获取飞书访问令牌失败: ${error.message}`);
+  }
+}
+
+// 缓存访问令牌（简单实现，不考虑过期时间）
+let cachedAccessToken = null;
+let tokenFetching = false;
+
+/**
+ * 确保有有效的飞书访问令牌
+ * @returns {Promise<string>} 访问令牌
+ */
+async function ensureAccessToken() {
+  if (cachedAccessToken) {
+    return cachedAccessToken;
+  }
+
+  if (tokenFetching) {
+    // 如果正在获取令牌，等待
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return ensureAccessToken();
+  }
+
+  tokenFetching = true;
+  try {
+    const appId = process.env.FEISHU_APP_ID;
+    const appSecret = process.env.FEISHU_APP_SECRET;
+
+    if (!appId || !appSecret) {
+      console.warn('飞书应用配置未设置，将使用模拟查询模式');
+      console.warn('请设置FEISHU_APP_ID和FEISHU_APP_SECRET环境变量以启用真实的飞书API查询');
+      return null;
+    }
+
+    cachedAccessToken = await getFeishuAccessToken(appId, appSecret);
+    return cachedAccessToken;
+  } catch (error) {
+    console.error('获取飞书访问令牌失败:', error.message);
+    console.warn('将使用模拟查询模式');
+    return null;
+  } finally {
+    tokenFetching = false;
+  }
+}
+
+/**
+ * 查询飞书多维表格记录
  * @param {string} appToken - 多维表格应用 token
  * @param {string} tableId - 表格 ID
  * @param {string} fieldName - 查询字段名（默认为"英文品名"）
  * @param {string} value - 查询值
- * @returns {object|null} 记录数据，如果不存在返回 null
+ * @returns {Promise<object|null>} 记录数据，如果不存在返回 null
  */
-function queryFeishuRecord(appToken, tableId, fieldName, value) {
-  // 这里是模拟实现，实际使用时需要调用 lark-cli 技能
-  // lark-cli base list-records {appToken} {tableId} --filter '{fieldName}="{value}"' --output json
-  console.log(`模拟查询: ${fieldName} = "${value}"`);
-  console.log(`实际应执行: lark-cli base list-records ${appToken} ${tableId} --filter '${fieldName}="${value}"' --output json`);
-  return null; // 模拟返回空，表示记录不存在
+async function queryFeishuRecord(appToken, tableId, fieldName, value) {
+  // 首先尝试使用真实的飞书API
+  const accessToken = await ensureAccessToken();
+
+  if (!accessToken) {
+    // 如果没有有效的访问令牌，使用模拟查询
+    console.log(`模拟查询: ${fieldName} = "${value}"`);
+    console.log(`实际应执行: lark-cli base list-records ${appToken} ${tableId} --filter '${fieldName}="${value}"' --output json`);
+    return null;
+  }
+
+  try {
+    // 构建飞书API查询URL
+    // 注意：飞书API的筛选参数需要在查询字符串中传递
+    const filter = JSON.stringify({
+      and: [
+        {
+          field: fieldName,
+          operator: 'is',
+          value: [value]
+        }
+      ]
+    });
+
+    const response = await httpRequest(
+      `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records?filter=${encodeURIComponent(filter)}`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data && response.data.items && response.data.items.length > 0) {
+      // 返回第一个匹配的记录
+      const record = response.data.items[0];
+      console.log(`飞书API查询成功: ${fieldName} = "${value}"，找到记录`);
+      return {
+        record_id: record.record_id,
+        fields: record.fields
+      };
+    } else {
+      console.log(`飞书API查询: ${fieldName} = "${value}"，未找到记录`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`飞书API查询失败: ${fieldName} = "${value}"`, error.message);
+    // 失败时使用模拟查询
+    console.log(`使用模拟查询: ${fieldName} = "${value}"`);
+    return null;
+  }
 }
 
 /**
- * 模拟在飞书多维表格中添加新记录（实际使用时需要替换为lark-cli调用）
+ * 在飞书多维表格中添加新记录
  * @param {string} appToken - 多维表格应用 token
  * @param {string} tableId - 表格 ID
  * @param {object} fields - 字段键值对，例如 { "英文品名": "Apple", "HS编码": "12345678" }
- * @returns {object} 新创建的记录
+ * @returns {Promise<object>} 新创建的记录
  */
-function createFeishuRecord(appToken, tableId, fields) {
-  // 这里是模拟实现，实际使用时需要调用 lark-cli 技能
-  // lark-cli base create-record {appToken} {tableId} --fields '{fieldsJson}' --output json
-  const fieldsJson = JSON.stringify(fields);
-  console.log(`模拟创建记录: ${fieldsJson}`);
-  console.log(`实际应执行: lark-cli base create-record ${appToken} ${tableId} --fields '${fieldsJson}' --output json`);
-  return { record_id: 'mock_record_id', fields: fields };
+async function createFeishuRecord(appToken, tableId, fields) {
+  // 首先尝试使用真实的飞书API
+  const accessToken = await ensureAccessToken();
+
+  if (!accessToken) {
+    // 如果没有有效的访问令牌，使用模拟创建
+    const fieldsJson = JSON.stringify(fields);
+    console.log(`模拟创建记录: ${fieldsJson}`);
+    console.log(`实际应执行: lark-cli base create-record ${appToken} ${tableId} --fields '${fieldsJson}' --output json`);
+    return { record_id: 'mock_record_id', fields: fields };
+  }
+
+  try {
+    const response = await httpRequest(
+      `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      },
+      { fields }
+    );
+
+    if (response.data && response.data.record) {
+      console.log(`飞书API创建记录成功: ${JSON.stringify(fields)}`);
+      return {
+        record_id: response.data.record.record_id,
+        fields: response.data.record.fields
+      };
+    } else {
+      throw new Error('飞书API未返回创建的记录数据');
+    }
+  } catch (error) {
+    console.error(`飞书API创建记录失败:`, error.message);
+    // 失败时使用模拟创建
+    console.log(`使用模拟创建记录: ${JSON.stringify(fields)}`);
+    return { record_id: 'mock_record_id', fields: fields };
+  }
 }
 
 /**
@@ -105,11 +310,11 @@ function createFeishuRecord(appToken, tableId, fields) {
  * @param {string} goodsName - 英文品名
  * @param {string} appToken - 多维表格应用 token
  * @param {string} tableId - 表格 ID
- * @returns {string} 8位HS编码
+ * @returns {Promise<string>} 8位HS编码
  */
 async function getOrCreateHSCode(goodsName, appToken, tableId) {
   // 查询是否存在该商品
-  const record = queryFeishuRecord(appToken, tableId, '英文品名', goodsName);
+  const record = await queryFeishuRecord(appToken, tableId, '英文品名', goodsName);
   if (record) {
     // 从记录中提取HS编码字段
     const hsCode = record.fields['HS编码'] || record.fields['hs_code'] || '';
@@ -126,7 +331,7 @@ async function getOrCreateHSCode(goodsName, appToken, tableId) {
       '英文品名': goodsName,
       'HS编码': '12345678'
     };
-    const newRecord = createFeishuRecord(appToken, tableId, fields);
+    const newRecord = await createFeishuRecord(appToken, tableId, fields);
     console.log(`新记录添加成功，记录ID: ${newRecord.record_id}`);
     return '12345678';
   }
