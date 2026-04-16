@@ -5,7 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>舱单文件处理系统</title>
   <script src="https://unpkg.com/tailwindcss@3.4.1/dist/tailwind.min.js"></script>
-  <script src="https://unpkg.com/lucide@0.436.0/dist/umd/lucide.min.js"></script>
+  <script>
+    // 加载 Lucide icons 并在加载完成后初始化
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/lucide@0.436.0/dist/umd/lucide.min.js';
+      script.onload = function() {
+        // Lucide 加载完成后初始化图标
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+          lucide.createIcons();
+        }
+      };
+      document.head.appendChild(script);
+    })();
+  </script>
   <style>
     body {
       background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f3e8ff 100%);
@@ -124,20 +137,11 @@
         lucide.createIcons();
         return true;
       }
-      console.warn('Lucide icons library not available yet');
       return false;
     }
 
     let selectedFiles = [];
     let zipFileBase64 = null;
-
-    // 等待 DOM 完全加载后初始化图标
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initLucideIcons);
-    } else {
-      // DOM 已经加载完成
-      initLucideIcons();
-    }
 
     // 文件选择处理
     const fileInput = document.getElementById('fileInput');
