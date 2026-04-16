@@ -192,6 +192,86 @@ function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
   });
 }
 
+/**
+ * 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+ * @param {Worksheet} worksheet - Excel工作表
+ * @param {string} placeholderPrefix - 占位符前缀，例如 '带HS的商品列表' 或 '无HS的商品列表'
+ */
+function applyGoodsListColor(worksheet, placeholderPrefix) {
+  // 辅助函数：获取单元格文本
+  const getCellText = (cell) => {
+    if (!cell.value) return '';
+    if (typeof cell.value === 'string') return cell.value;
+    if (cell.value.richText) {
+      return cell.value.richText.map(rt => rt.text || '').join('');
+    }
+    return '';
+  };
+
+  // 商品列表通常位于 D13 和 E13 单元格（根据模板）
+  const targetAddresses = ['D13', 'E13'];
+  const targetCells = [];
+  targetAddresses.forEach(address => {
+    const cell = worksheet.getCell(address);
+    if (cell) {
+      targetCells.push(cell);
+    }
+  });
+
+  if (targetCells.length === 0) {
+    console.log(`未找到商品列表单元格 D13/E13`);
+    return;
+  }
+
+  console.log(`找到 ${targetCells.length} 个商品列表单元格`);
+
+  targetCells.forEach((cell) => {
+    const cellText = getCellText(cell);
+    if (!cellText || cellText.trim() === '') {
+      console.log(`单元格 ${cell.address} 为空，跳过颜色设置`);
+      return;
+    }
+
+    // 按分隔符 ', ' 拆分文本，得到每个舱单的商品列表
+    // 注意：最后一个商品列表后没有分隔符
+    const parts = cellText.split(', ');
+
+    // 如果只有一个部分或没有分隔符，可能所有商品列表都在一个部分中
+    if (parts.length <= 1) {
+      console.log(`单元格 ${cell.address} 只有一个商品列表部分，不设置颜色`);
+      return;
+    }
+
+    // 创建富文本数组
+    const richTextParts = [];
+    parts.forEach((part, index) => {
+      // 判断舱单序号（索引+1）：奇数红色，偶数黑色
+      const isOdd = (index + 1) % 2 === 1;
+      const color = isOdd ? 'FF0000' : '000000'; // 红色：FF0000，黑色：000000
+
+      richTextParts.push({
+        font: { color: { argb: color } },
+        text: part
+      });
+
+      // 添加分隔符（除了最后一个部分）
+      if (index < parts.length - 1) {
+        richTextParts.push({
+          font: { color: { argb: '000000' } }, // 分隔符使用黑色
+          text: ', '
+        });
+      }
+    });
+
+    // 设置单元格值为富文本
+    cell.value = {
+      richText: richTextParts
+    };
+
+    console.log(`单元格 ${cell.address} 设置了 ${parts.length} 个商品列表部分的颜色（奇数红色，偶数黑色）`);
+  });
+}
+
 // 生成 Word 文档
 async function generateWordDocument(data) {
   const templatePath = path.join(__dirname, '../templates/提单确认件的格式.docx');
@@ -608,7 +688,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
       replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
-      // 添加无HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
+      // 添加带HS的商品列表占位符，非空商品列表后添加分隔符（除了最后一个非空商品列表）
       const goods = cargo.英文品名 || '';
       let processedGoods = goods;
       // 如果需要转换HS编码
@@ -622,7 +702,7 @@ async function generateOKBillWithHS(firstData, allCargoData) {
           processedGoods = goodsNames.map(name => `${name} 12345678`).join(', ');
         }
       }
-      replacementData[`{无HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
+      replacementData[`{带HS的商品列表${suffix}}`] = processedGoods + (processedGoods && i !== lastNonEmptyIndex ? ', ' : '');
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -633,8 +713,8 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = '';
       replacementData[`{体积${suffix}}`] = '';
       replacementData[`{并单号${suffix}}`] = ''; // 清空并单号字段
-      // 清空无HS的商品列表占位符
-      replacementData[`{无HS的商品列表${suffix}}`] = '';
+      // 清空带HS的商品列表占位符
+      replacementData[`{带HS的商品列表${suffix}}`] = '';
     }
   }
 
@@ -713,6 +793,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
+
+    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+    applyGoodsListColor(worksheet, '带HS的商品列表');
   });
 
   return workbook.xlsx.writeBuffer();
@@ -942,6 +1025,9 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
     console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
+
+    // 为商品列表设置字体颜色（奇数舱单红色，偶数舱单黑色）
+    applyGoodsListColor(worksheet, '无HS的商品列表');
   });
 
   return workbook.xlsx.writeBuffer();
