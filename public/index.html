@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>舱单文件处理系统</title>
-  <link href="https://cdn.tailwindcss.com" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/lucide@0.436.0/dist/umd/lucide.min.js"></script>
+  <script src="https://unpkg.com/tailwindcss@3.4.1/dist/tailwind.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.436.0/dist/umd/lucide.min.js"></script>
   <style>
     body {
       background: linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f3e8ff 100%);
@@ -128,11 +128,16 @@
       return false;
     }
 
-    // 初始化图标
-    initLucideIcons();
-
     let selectedFiles = [];
     let zipFileBase64 = null;
+
+    // 等待 DOM 完全加载后初始化图标
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initLucideIcons);
+    } else {
+      // DOM 已经加载完成
+      initLucideIcons();
+    }
 
     // 文件选择处理
     const fileInput = document.getElementById('fileInput');
