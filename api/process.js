@@ -548,12 +548,27 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     }
   }
 
+  // 为每个舱单生成带HS的商品列表
+  const cargoListsWithHS = [];
+  for (let i = 0; i < allCargoData.length; i++) {
+    const cargo = allCargoData[i];
+    const englishNames = cargo.英文品名 || '';
+    const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+    // 为每个商品添加HS编码（默认88886666）
+    const goodsWithHS = goodsList.map(goods => `${goods} 88886666`);
+    // 用逗号连接成字符串
+    const cargoListString = goodsWithHS.join(', ');
+    cargoListsWithHS.push(cargoListString);
+  }
+
   console.log('总提单OK件（带HS）替换数据:', {
     提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
+    带HS的商品列表数量: cargoListsWithHS.length,
+    带HS的商品列表: cargoListsWithHS,
   });
 
   // 处理所有 sheet
@@ -617,11 +632,32 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
+    // 设置带HS的商品列表到第12行第4列（C列）
+    const goodsListCell = worksheet.getCell('C12');
+    // 构建富文本，奇数个列表用红色，偶数个列表用黑色
+    const richTextItems = [];
+    for (let i = 0; i < cargoListsWithHS.length; i++) {
+      const isOdd = (i + 1) % 2 === 1; // 第1、3、5...个列表是奇数
+      const color = isOdd ? 'FFFF0000' : 'FF000000'; // 红色 ARGB: FFFF0000, 黑色 ARGB: FF000000
+      richTextItems.push({
+        font: { color: { argb: color } },
+        text: cargoListsWithHS[i]
+      });
+      // 如果不是最后一个列表，添加换行符
+      if (i < cargoListsWithHS.length - 1) {
+        richTextItems.push({
+          font: { color: { argb: 'FF000000' } },
+          text: '\n'
+        });
+      }
+    }
+    goodsListCell.value = { richText: richTextItems };
+
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
-    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
+    console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithHS.length} 个商品列表`);
   });
 
   return workbook.xlsx.writeBuffer();
@@ -738,12 +774,25 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     }
   }
 
+  // 为每个舱单生成无HS的商品列表
+  const cargoListsWithoutHS = [];
+  for (let i = 0; i < allCargoData.length; i++) {
+    const cargo = allCargoData[i];
+    const englishNames = cargo.英文品名 || '';
+    const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
+    // 用逗号连接成字符串
+    const cargoListString = goodsList.join(', ');
+    cargoListsWithoutHS.push(cargoListString);
+  }
+
   console.log('总提单OK件（无HS）替换数据:', {
     提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
     所有提单号: allCargoData.map(d => d.提单号),
+    无HS的商品列表数量: cargoListsWithoutHS.length,
+    无HS的商品列表: cargoListsWithoutHS,
   });
 
   // 处理所有 sheet
@@ -807,11 +856,32 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1}: 清空第 ${rowNumber} 行（提单号为空）`);
     });
 
+    // 设置无HS的商品列表到第12行第4列（C列）
+    const goodsListCell = worksheet.getCell('C12');
+    // 构建富文本，奇数个列表用红色，偶数个列表用黑色
+    const richTextItems = [];
+    for (let i = 0; i < cargoListsWithoutHS.length; i++) {
+      const isOdd = (i + 1) % 2 === 1; // 第1、3、5...个列表是奇数
+      const color = isOdd ? 'FFFF0000' : 'FF000000'; // 红色 ARGB: FFFF0000, 黑色 ARGB: FF000000
+      richTextItems.push({
+        font: { color: { argb: color } },
+        text: cargoListsWithoutHS[i]
+      });
+      // 如果不是最后一个列表，添加换行符
+      if (i < cargoListsWithoutHS.length - 1) {
+        richTextItems.push({
+          font: { color: { argb: 'FF000000' } },
+          text: '\n'
+        });
+      }
+    }
+    goodsListCell.value = { richText: richTextItems };
+
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
     // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
 
-    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行`);
+    console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithoutHS.length} 个商品列表`);
   });
 
   return workbook.xlsx.writeBuffer();
