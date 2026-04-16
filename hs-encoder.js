@@ -201,22 +201,39 @@ async function ensureAccessToken() {
  * @param {string} tableId - 表格 ID
  * @param {string} fieldName - 查询字段名（默认为"英文品名"）
  * @param {string} value - 查询值
+ * @param {object} options - 选项
+ * @param {boolean} options.useBulkQuery - 是否使用批量查询（获取所有记录后在本地筛选），默认为true
+ * @param {boolean} options.useFuzzyMatch - 是否使用模糊匹配，默认为false
  * @returns {Promise<object|null>} 记录数据，如果不存在返回 null
  */
-async function queryFeishuRecord(appToken, tableId, fieldName, value) {
+async function queryFeishuRecord(appToken, tableId, fieldName, value, options = {}) {
+  const {
+    useBulkQuery = true, // 默认使用批量查询，像PowerShell命令那样
+    useFuzzyMatch = false // 默认不使用模糊匹配
+  } = options;
+
   // 将查询值转换为大写，以匹配表格中的数据格式
   const upperValue = value.toUpperCase().trim();
 
   const accessToken = await ensureAccessToken();
 
   try {
+    // 方法1：批量查询（像PowerShell命令那样）- 默认使用此方法
+    if (useBulkQuery) {
+      console.log(`使用批量查询方法: ${fieldName} = "${upperValue}"`);
+      return await queryFeishuRecordBulk(appToken, tableId, fieldName, upperValue, useFuzzyMatch);
+    }
+
+    // 方法2：API筛选查询（原有方法）
+    console.log(`使用API筛选查询方法: ${fieldName} = "${upperValue}"`);
+
     // 构建飞书API查询URL
     // 注意：飞书API的筛选参数需要在查询字符串中传递
     const filter = JSON.stringify({
       and: [
         {
           field: fieldName,
-          operator: 'is',
+          operator: useFuzzyMatch ? 'contains' : 'is',
           value: [upperValue]
         }
       ]
@@ -237,16 +254,147 @@ async function queryFeishuRecord(appToken, tableId, fieldName, value) {
       // 返回第一个匹配的记录
       const record = response.data.items[0];
       console.log(`飞书API查询成功: ${fieldName} = "${upperValue}"，找到记录`);
+      console.log(`记录字段:`, JSON.stringify(record.fields));
       return {
         record_id: record.record_id,
         fields: record.fields
       };
     } else {
       console.log(`飞书API查询: ${fieldName} = "${upperValue}"，未找到记录`);
+      console.log(`API响应:`, JSON.stringify(response).substring(0, 500));
       return null;
     }
   } catch (error) {
     console.error(`飞书API查询失败: ${fieldName} = "${upperValue}"`, error.message);
+    console.error(`错误详情:`, error);
+    throw error;
+  }
+}
+
+/**
+ * 批量查询飞书多维表格记录（像PowerShell命令那样）
+ * 获取所有记录后在本地筛选
+ * @param {string} appToken - 多维表格应用 token
+ * @param {string} tableId - 表格 ID
+ * @param {string} fieldName - 查询字段名
+ * @param {string} upperValue - 大写的查询值
+ * @param {boolean} useFuzzyMatch - 是否使用模糊匹配
+ * @returns {Promise<object|null>} 记录数据，如果不存在返回 null
+ */
+async function queryFeishuRecordBulk(appToken, tableId, fieldName, upperValue, useFuzzyMatch = false) {
+  const accessToken = await ensureAccessToken();
+  let pageToken = '';
+  let allRecords = [];
+  let pageCount = 0;
+
+  try {
+    // 分页获取所有记录
+    do {
+      pageCount++;
+      let url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records?page_size=100`;
+      if (pageToken) {
+        url += `&page_token=${pageToken}`;
+      }
+
+      console.log(`批量查询第${pageCount}页: ${url.substring(0, 100)}...`);
+
+      const response = await httpRequest(
+        url,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data && response.data.items) {
+        allRecords = allRecords.concat(response.data.items);
+        console.log(`第${pageCount}页获取到${response.data.items.length}条记录，总计${allRecords.length}条`);
+
+        // 检查是否有下一页
+        pageToken = response.data.page_token || '';
+      } else {
+        console.log(`第${pageCount}页无数据，响应:`, JSON.stringify(response).substring(0, 200));
+        break;
+      }
+
+      // 防止无限循环，最多获取10页（1000条记录）
+      if (pageCount >= 10) {
+        console.log(`达到最大分页限制（10页），停止获取`);
+        break;
+      }
+
+    } while (pageToken);
+
+    console.log(`批量查询完成，共获取${allRecords.length}条记录`);
+
+    // 在本地筛选记录
+    let matchedRecord = null;
+
+    for (const record of allRecords) {
+      const fields = record.fields || {};
+
+      // 尝试通过字段名查找
+      if (fields[fieldName] !== undefined) {
+        const fieldValue = String(fields[fieldName]).toUpperCase().trim();
+        let isMatch = false;
+
+        if (useFuzzyMatch) {
+          isMatch = fieldValue.includes(upperValue) || upperValue.includes(fieldValue);
+        } else {
+          isMatch = fieldValue === upperValue;
+        }
+
+        if (isMatch) {
+          console.log(`找到匹配记录（通过字段名${fieldName}）: ${fieldValue} = ${upperValue}`);
+          console.log(`完整字段:`, JSON.stringify(fields));
+          matchedRecord = record;
+          break;
+        }
+      }
+
+      // 如果通过字段名没找到，尝试通过字段值匹配（像PowerShell命令那样）
+      // PowerShell命令使用索引，我们需要找到哪个字段包含商品名称
+      if (!matchedRecord) {
+        for (const [key, val] of Object.entries(fields)) {
+          const fieldValue = String(val).toUpperCase().trim();
+          let isMatch = false;
+
+          if (useFuzzyMatch) {
+            isMatch = fieldValue.includes(upperValue) || upperValue.includes(fieldValue);
+          } else {
+            isMatch = fieldValue === upperValue;
+          }
+
+          if (isMatch) {
+            console.log(`找到匹配记录（通过字段值）: 字段"${key}"的值"${fieldValue}"匹配"${upperValue}"`);
+            console.log(`完整字段:`, JSON.stringify(fields));
+            console.log(`注意：商品名称字段可能是"${key}"而不是"${fieldName}"`);
+            matchedRecord = record;
+            break;
+          }
+        }
+      }
+
+      if (matchedRecord) break;
+    }
+
+    if (matchedRecord) {
+      return {
+        record_id: matchedRecord.record_id,
+        fields: matchedRecord.fields
+      };
+    } else {
+      console.log(`批量查询未找到匹配记录: ${fieldName} = "${upperValue}"`);
+      console.log(`所有记录的字段名:`, allRecords.length > 0 ? Object.keys(allRecords[0].fields || {}) : '无记录');
+      console.log(`前3条记录的字段值:`, allRecords.slice(0, 3).map(r => r.fields));
+      return null;
+    }
+
+  } catch (error) {
+    console.error(`批量查询失败: ${fieldName} = "${upperValue}"`, error.message);
     throw error;
   }
 }
@@ -294,33 +442,69 @@ async function createFeishuRecord(appToken, tableId, fields) {
  * @param {string} goodsName - 英文品名
  * @param {string} appToken - 多维表格应用 token
  * @param {string} tableId - 表格 ID
+ * @param {string} goodsNameField - 商品名字段名，默认为"英文品名"
+ * @param {string} hsCodeField - HS编码字段名，默认为"HS编码"
  * @returns {Promise<string>} 8位HS编码
  */
-async function getOrCreateHSCode(goodsName, appToken, tableId) {
+async function getOrCreateHSCode(goodsName, appToken, tableId, goodsNameField = '英文品名', hsCodeField = 'HS编码') {
   // 确保商品名称为大写
   const upperGoodsName = goodsName.toUpperCase().trim();
 
-  // 查询是否存在该商品
-  const record = await queryFeishuRecord(appToken, tableId, '英文品名', upperGoodsName);
+  console.log(`开始查询商品"${upperGoodsName}"的HS编码...`);
+
+  // 查询是否存在该商品 - 使用批量查询和模糊匹配
+  console.log(`使用字段名查询: 商品名称字段="${goodsNameField}"，HS编码字段="${hsCodeField}"`);
+  const record = await queryFeishuRecord(appToken, tableId, goodsNameField, upperGoodsName, {
+    useBulkQuery: true, // 使用批量查询，像PowerShell命令那样
+    useFuzzyMatch: true // 使用模糊匹配，因为商品名称可能不完全匹配
+  });
+
   if (record) {
-    // 从记录中提取HS编码字段
-    const hsCode = record.fields['HS编码'] || record.fields['hs_code'] || '';
-    if (hsCode && hsCode.toString().length === 8) {
-      return hsCode.toString();
+    console.log(`找到商品"${upperGoodsName}"的记录，字段列表:`, Object.keys(record.fields));
+    console.log(`完整字段值:`, record.fields);
+
+    // 从记录中提取HS编码字段 - 优先使用传入的字段名，然后尝试多种可能的字段名
+    const hsCode = record.fields[hsCodeField] ||
+                   record.fields['HS编码'] ||
+                   record.fields['hs_code'] ||
+                   record.fields['HS'] ||
+                   record.fields['hs'] ||
+                   record.fields['编码'] ||
+                   record.fields['HS Code'] ||
+                   record.fields['HS CODE'] ||
+                   '';
+
+    console.log(`提取的HS编码: "${hsCode}"，类型: ${typeof hsCode}，长度: ${String(hsCode).length}`);
+
+    // 检查是否是有效的8位HS编码
+    const hsCodeStr = String(hsCode || '').trim();
+    if (hsCodeStr && hsCodeStr.length === 8 && /^\d{8}$/.test(hsCodeStr)) {
+      console.log(`商品"${upperGoodsName}"的HS编码有效: ${hsCodeStr}`);
+      return hsCodeStr;
+    } else if (hsCodeStr && hsCodeStr.length > 0) {
+      console.warn(`商品"${upperGoodsName}"的HS编码格式不正确: "${hsCodeStr}"，长度: ${hsCodeStr.length}，使用默认值12345678`);
+      return '12345678';
     } else {
-      console.warn(`商品"${upperGoodsName}"的HS编码格式不正确: ${hsCode}，使用默认值12345678`);
+      console.warn(`商品"${upperGoodsName}"的HS编码字段为空，使用默认值12345678`);
       return '12345678';
     }
   } else {
     // 创建新记录
     console.log(`商品"${upperGoodsName}"不存在于飞书多维表格中，添加新记录...`);
     const fields = {
-      '英文品名': upperGoodsName,
-      'HS编码': '12345678'
+      [goodsNameField]: upperGoodsName,
+      [hsCodeField]: '12345678'
     };
-    const newRecord = await createFeishuRecord(appToken, tableId, fields);
-    console.log(`新记录添加成功，记录ID: ${newRecord.record_id}`);
-    return '12345678';
+    console.log(`创建新记录的字段:`, fields);
+    try {
+      const newRecord = await createFeishuRecord(appToken, tableId, fields);
+      console.log(`新记录添加成功，记录ID: ${newRecord.record_id}`);
+      return '12345678';
+    } catch (error) {
+      console.error(`创建新记录失败:`, error.message);
+      // 即使创建失败，也返回默认HS编码
+      return '12345678';
+    }
   }
 }
 
@@ -358,13 +542,291 @@ async function addHSCodes(goodsListWithoutHS, options = {}) {
   // 处理每个商品
   const results = [];
   for (const goodsName of goodsNames) {
+    console.log(`处理商品: "${goodsName}"`);
     // 获取或创建HS编码
-    const hsCode = await getOrCreateHSCode(goodsName, appToken, tableId);
+    const hsCode = await getOrCreateHSCode(goodsName, appToken, tableId, goodsNameField, hsCodeField);
+    console.log(`商品"${goodsName}"的HS编码: ${hsCode}`);
     results.push(`${goodsName} ${hsCode}`);
   }
 
   // 重新组合为逗号分隔的字符串
   return results.join(', ');
+}
+
+/**
+ * 获取表格的字段定义列表
+ * @param {string} baseToken - 多维表格应用token
+ * @param {string} tableId - 表格ID
+ * @returns {Promise<Array<object>>} 字段定义数组，按表格中的顺序排列
+ */
+async function getTableFields(baseToken, tableId) {
+  const accessToken = await ensureAccessToken();
+
+  try {
+    const response = await httpRequest(
+      `https://open.feishu.cn/open-apis/bitable/v1/apps/${baseToken}/tables/${tableId}/fields`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data && response.data.items) {
+      // 返回字段列表，保持API返回的顺序（通常是表格中的顺序）
+      return response.data.items;
+    } else {
+      throw new Error('无法获取字段定义');
+    }
+  } catch (error) {
+    console.error(`获取表格字段定义失败:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * 按商品描述关键词查询HS编码（模拟PowerShell命令功能）
+ * 支持按字段索引或字段名进行筛选和返回
+ * @param {string} baseToken - 飞书多维表格应用token（如：OoNybRydGaN6Wwspy41cnQQCnGe）
+ * @param {string} tableId - 表格ID（如：tbl2uWivrvboRe2a）
+ * @param {string} searchText - 搜索关键词（如："ROPE"），不区分大小写
+ * @param {object} options - 选项
+ * @param {number} options.fieldIndex - 要筛选的字段索引（从0开始），如果同时指定fieldName则优先使用fieldName
+ * @param {string} options.fieldName - 要筛选的字段名，如果未指定则使用fieldIndex
+ * @param {number} options.returnIndex - 要返回的字段索引（从0开始），如果同时指定returnFieldName则优先使用returnFieldName
+ * @param {string} options.returnFieldName - 要返回的字段名，如果未指定则使用returnIndex
+ * @param {number} options.limit - 最大记录数，默认为500
+ * @param {boolean} options.useRegex - 是否使用正则表达式匹配，默认为false（使用包含匹配）
+ * @returns {Promise<Array<string>>} 匹配记录的指定字段值数组
+ */
+async function queryHSByDescription(baseToken, tableId, searchText, options = {}) {
+  const {
+    fieldIndex = 1,           // 默认筛选第二个字段（商品描述）
+    fieldName = null,         // 筛选字段名（优先使用）
+    returnIndex = 0,          // 默认返回第一个字段（HS编码）
+    returnFieldName = null,   // 返回字段名（优先使用）
+    limit = 500,              // 默认限制500条记录
+    useRegex = false          // 是否使用正则表达式
+  } = options;
+
+  // 处理正则表达式前缀，如(?i)表示不区分大小写
+  let actualSearchText = searchText;
+  let actualUseRegex = useRegex;
+
+  // 自动检测(?i)前缀
+  if (searchText.startsWith('(?i)')) {
+    actualSearchText = searchText.substring(4);
+    actualUseRegex = true;
+    console.log(`检测到正则表达式前缀(?i)，使用正则表达式模式，实际搜索文本: "${actualSearchText}"`);
+  }
+
+  console.log(`开始按描述查询HS编码: baseToken=${baseToken}, tableId=${tableId}, searchText="${actualSearchText}"`);
+  console.log(`选项:`, options);
+
+  const accessToken = await ensureAccessToken();
+  let pageToken = '';
+  let allRecords = [];
+  let pageCount = 0;
+  const searchTextUpper = actualSearchText.toUpperCase();
+
+  // 获取表格字段定义以确定字段顺序
+  let tableFields = [];
+  try {
+    tableFields = await getTableFields(baseToken, tableId);
+    console.log(`获取到表格字段定义，共${tableFields.length}个字段:`, tableFields.map(f => f.field_name));
+  } catch (error) {
+    console.warn(`无法获取表格字段定义，将使用字段对象键的顺序:`, error.message);
+  }
+
+  try {
+    // 分页获取所有记录，直到达到限制
+    do {
+      pageCount++;
+      let url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${baseToken}/tables/${tableId}/records?page_size=100`;
+      if (pageToken) {
+        url += `&page_token=${pageToken}`;
+      }
+
+      console.log(`批量查询第${pageCount}页...`);
+
+      const response = await httpRequest(
+        url,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data && response.data.items) {
+        allRecords = allRecords.concat(response.data.items);
+        console.log(`第${pageCount}页获取到${response.data.items.length}条记录，总计${allRecords.length}条`);
+
+        // 检查是否有下一页
+        pageToken = response.data.page_token || '';
+
+        // 如果已达到限制，停止获取
+        if (allRecords.length >= limit) {
+          console.log(`达到记录限制${limit}条，停止获取更多记录`);
+          allRecords = allRecords.slice(0, limit); // 截取到限制数量
+          pageToken = ''; // 停止分页
+        }
+      } else {
+        console.log(`第${pageCount}页无数据`);
+        break;
+      }
+
+      // 防止无限循环，最多获取10页（1000条记录）
+      if (pageCount >= 10) {
+        console.log(`达到最大分页限制（10页），停止获取`);
+        break;
+      }
+
+    } while (pageToken);
+
+    console.log(`批量查询完成，共获取${allRecords.length}条记录`);
+
+    // 确定要筛选和返回的字段
+    let filterFieldKey = null;
+    let returnFieldKey = null;
+
+    // 如果有字段定义，使用字段名查找字段键
+    if (tableFields.length > 0) {
+      if (fieldName) {
+        const field = tableFields.find(f => f.field_name === fieldName);
+        if (field) {
+          filterFieldKey = field.field_id;
+          console.log(`使用字段名"${fieldName}"筛选，字段键: ${filterFieldKey}`);
+        } else {
+          console.warn(`未找到字段名"${fieldName}"，将使用索引${fieldIndex}`);
+        }
+      }
+
+      if (returnFieldName) {
+        const field = tableFields.find(f => f.field_name === returnFieldName);
+        if (field) {
+          returnFieldKey = field.field_id;
+          console.log(`使用字段名"${returnFieldName}"返回，字段键: ${returnFieldKey}`);
+        } else {
+          console.warn(`未找到字段名"${returnFieldName}"，将使用索引${returnIndex}`);
+        }
+      }
+    }
+
+    // 如果没有字段定义或未找到字段名，使用索引
+    // 需要根据字段定义顺序确定字段键
+    if (!filterFieldKey && tableFields.length > fieldIndex) {
+      filterFieldKey = tableFields[fieldIndex].field_id;
+      console.log(`使用索引${fieldIndex}筛选，字段键: ${filterFieldKey}，字段名: ${tableFields[fieldIndex].field_name}`);
+    }
+
+    if (!returnFieldKey && tableFields.length > returnIndex) {
+      returnFieldKey = tableFields[returnIndex].field_id;
+      console.log(`使用索引${returnIndex}返回，字段键: ${returnFieldKey}，字段名: ${tableFields[returnIndex].field_name}`);
+    }
+
+    // 筛选匹配的记录
+    const matchedValues = [];
+
+    for (const record of allRecords) {
+      const fields = record.fields || {};
+
+      let filterValue = '';
+      let returnValue = '';
+
+      // 如果确定了字段键，直接使用
+      if (filterFieldKey && fields[filterFieldKey] !== undefined) {
+        filterValue = String(fields[filterFieldKey] || '');
+      } else if (fieldName && fields[fieldName] !== undefined) {
+        // 尝试直接使用字段名作为键（某些情况下字段名可能就是键）
+        filterValue = String(fields[fieldName] || '');
+      } else {
+        // 使用索引回退方案：将字段对象转换为数组
+        const fieldEntries = Object.entries(fields);
+
+        // 如果有字段定义，按字段定义顺序排序
+        if (tableFields.length > 0) {
+          // 创建字段ID到索引的映射
+          const fieldIdToIndex = {};
+          tableFields.forEach((field, index) => {
+            fieldIdToIndex[field.field_id] = index;
+          });
+
+          // 按字段定义顺序排序
+          fieldEntries.sort((a, b) => {
+            const indexA = fieldIdToIndex[a[0]] !== undefined ? fieldIdToIndex[a[0]] : Infinity;
+            const indexB = fieldIdToIndex[b[0]] !== undefined ? fieldIdToIndex[b[0]] : Infinity;
+            return indexA - indexB;
+          });
+        } else {
+          // 按字段名排序作为回退
+          fieldEntries.sort((a, b) => a[0].localeCompare(b[0]));
+        }
+
+        const fieldValues = fieldEntries.map(([key, value]) => String(value || ''));
+
+        if (fieldValues.length > Math.max(fieldIndex, returnIndex)) {
+          filterValue = fieldValues[fieldIndex];
+          returnValue = fieldValues[returnIndex];
+        }
+      }
+
+      // 如果还没有获取返回值，但确定了返回字段键
+      if (!returnValue && returnFieldKey && fields[returnFieldKey] !== undefined) {
+        returnValue = String(fields[returnFieldKey] || '');
+      } else if (!returnValue && returnFieldName && fields[returnFieldName] !== undefined) {
+        returnValue = String(fields[returnFieldName] || '');
+      }
+
+      // 进行匹配
+      if (filterValue) {
+        const filterValueUpper = filterValue.toUpperCase();
+        let isMatch = false;
+
+        if (useRegex) {
+          try {
+            const regex = new RegExp(searchText, 'i'); // 不区分大小写
+            isMatch = regex.test(filterValue);
+          } catch (error) {
+            console.warn(`正则表达式"${searchText}"无效，使用包含匹配:`, error.message);
+            isMatch = filterValueUpper.includes(searchTextUpper);
+          }
+        } else {
+          isMatch = filterValueUpper.includes(searchTextUpper);
+        }
+
+        if (isMatch) {
+          if (!returnValue) {
+            // 如果还没有返回值，尝试使用索引回退
+            const fieldEntries = Object.entries(fields);
+            const fieldValues = fieldEntries.map(([key, value]) => String(value || ''));
+            if (fieldValues.length > returnIndex) {
+              returnValue = fieldValues[returnIndex];
+            }
+          }
+
+          if (returnValue) {
+            console.log(`找到匹配记录: "${filterValue}" 包含 "${searchText}"`);
+            console.log(`返回值: "${returnValue}"`);
+            matchedValues.push(returnValue);
+          } else {
+            console.warn(`找到匹配记录但无法获取返回值: "${filterValue}"`);
+          }
+        }
+      }
+    }
+
+    console.log(`查询完成，共找到${matchedValues.length}条匹配记录`);
+    return matchedValues;
+
+  } catch (error) {
+    console.error(`按描述查询HS编码失败:`, error.message);
+    throw error;
+  }
 }
 
 /**
@@ -459,6 +921,8 @@ module.exports = {
   queryFeishuRecord,
   createFeishuRecord,
   getOrCreateHSCode,
+  getTableFields,
+  queryHSByDescription,
   getWorkflowInstructions
 };
 
@@ -474,7 +938,43 @@ HS编码转换工具
      feishuBaseUrl: "https://yourdomain.feishu.cn/base/appToken?table=tableId"
    });
 
-2. 使用lark-cli技能手动操作:
+2. 按描述查询HS编码（模拟PowerShell命令）:
+   const { queryHSByDescription } = require('./hs-encoder');
+   // 基本用法（按字段索引）
+   const results1 = await queryHSByDescription(
+     "OoNybRydGaN6Wwspy41cnQQCnGe", // baseToken
+     "tbl2uWivrvboRe2a", // tableId
+     "ROPE", // 搜索关键词
+     {
+       fieldIndex: 1,     // 第二个字段是商品描述
+       returnIndex: 0,    // 第一个字段是HS编码
+       limit: 500         // 最多500条记录
+     }
+   );
+   // 使用字段名（更可靠）
+   const results2 = await queryHSByDescription(
+     "OoNybRydGaN6Wwspy41cnQQCnGe",
+     "tbl2uWivrvboRe2a",
+     "ROPE",
+     {
+       fieldName: "商品描述",     // 筛选字段名
+       returnFieldName: "HS编码", // 返回字段名
+       limit: 500
+     }
+   );
+   // 使用正则表达式（模拟PowerShell的-match操作符）
+   const results3 = await queryHSByDescription(
+     "OoNybRydGaN6Wwspy41cnQQCnGe",
+     "tbl2uWivrvboRe2a",
+     "(?i)ROPE", // (?i)表示不区分大小写，自动启用正则表达式
+     {
+       fieldIndex: 1,
+       returnIndex: 0,
+       limit: 500
+     }
+   );
+
+3. 使用lark-cli技能手动操作:
    const { getWorkflowInstructions } = require('./hs-encoder');
    const instructions = getWorkflowInstructions("Apple, Banana, Orange", "https://yourdomain.feishu.cn/base/appToken?table=tableId");
    console.log(instructions);
@@ -486,5 +986,6 @@ HS编码转换工具
 - 查询时会自动将商品名称转换为大写进行匹配
 - 如果商品不存在，会自动创建新记录，HS编码为12345678
 - 需要设置有效的FEISHU_APP_ID和FEISHU_APP_SECRET环境变量
+- queryHSByDescription函数需要表格的字段定义权限
 `);
 }
