@@ -655,28 +655,28 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
 
-      // 创建新的富文本，为每个舱单分配一个片段
+      // 创建新的富文本，为每个舱单分配一个片段（固定7个片段）
       const newRichText = [];
 
       for (let i = 0; i < 7; i++) {
-        if (i < originalRichText.length) {
-          const originalRt = originalRichText[i];
+        // 获取字体样式：优先使用对应片段的字体，否则使用第一个片段的字体
+        const font = originalRichText[i] ? originalRichText[i].font :
+                    (originalRichText[0] ? originalRichText[0].font : {});
 
-          if (i < cargoListsWithHS.length) {
-            // 有数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: cargoListsWithHS[i]
-            });
-            console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoListsWithHS[i]}" (颜色: ${originalRt.font.color.argb})`);
-          } else {
-            // 无数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: ''
-            });
-            console.log(`总提单OK件（带HS）片段${i + 1}: "(空)"`);
-          }
+        if (i < cargoListsWithHS.length) {
+          // 有数据的舱单
+          newRichText.push({
+            font: font,
+            text: cargoListsWithHS[i]
+          });
+          console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoListsWithHS[i]}" (字体: ${font.color ? '有颜色' : '默认'})`);
+        } else {
+          // 无数据的舱单
+          newRichText.push({
+            font: font,
+            text: ''
+          });
+          console.log(`总提单OK件（带HS）片段${i + 1}: "(空)"`);
         }
       }
 
@@ -901,28 +901,28 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
 
-      // 创建新的富文本，为每个舱单分配一个片段
+      // 创建新的富文本，为每个舱单分配一个片段（固定7个片段）
       const newRichText = [];
 
       for (let i = 0; i < 7; i++) {
-        if (i < originalRichText.length) {
-          const originalRt = originalRichText[i];
+        // 获取字体样式：优先使用对应片段的字体，否则使用第一个片段的字体
+        const font = originalRichText[i] ? originalRichText[i].font :
+                    (originalRichText[0] ? originalRichText[0].font : {});
 
-          if (i < cargoListsWithoutHS.length) {
-            // 有数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: cargoListsWithoutHS[i]
-            });
-            console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoListsWithoutHS[i]}" (颜色: ${originalRt.font.color.argb})`);
-          } else {
-            // 无数据的舱单
-            newRichText.push({
-              font: originalRt.font,
-              text: ''
-            });
-            console.log(`总提单OK件（无HS）片段${i + 1}: "(空)"`);
-          }
+        if (i < cargoListsWithoutHS.length) {
+          // 有数据的舱单
+          newRichText.push({
+            font: font,
+            text: cargoListsWithoutHS[i]
+          });
+          console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoListsWithoutHS[i]}" (字体: ${font.color ? '有颜色' : '默认'})`);
+        } else {
+          // 无数据的舱单
+          newRichText.push({
+            font: font,
+            text: ''
+          });
+          console.log(`总提单OK件（无HS）片段${i + 1}: "(空)"`);
         }
       }
 
