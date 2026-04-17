@@ -655,33 +655,53 @@ async function generateOKBillWithHS(firstData, allCargoData) {
       console.log(`总提单OK件（带HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
 
-      // 创建新的富文本，为每个舱单分配一个片段（固定7个片段）
+      // 创建新的富文本，按照指定格式：第1,3,5,7个片段红色，第2,4,6个片段黑色，字体Times New Roman
       const newRichText = [];
+      let hasContent = false; // 标记前面是否已经有内容
 
       for (let i = 0; i < 7; i++) {
-        // 获取字体样式：优先使用对应片段的字体，否则使用第一个片段的字体
-        const font = originalRichText[i] ? originalRichText[i].font :
-                    (originalRichText[0] ? originalRichText[0].font : {});
+        const cargoList = cargoListsWithHS[i];
 
-        if (i < cargoListsWithHS.length) {
-          // 有数据的舱单
-          newRichText.push({
-            font: font,
-            text: cargoListsWithHS[i]
-          });
-          console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoListsWithHS[i]}" (字体: ${font.color ? '有颜色' : '默认'})`);
-        } else {
-          // 无数据的舱单
-          newRichText.push({
-            font: font,
-            text: ''
-          });
-          console.log(`总提单OK件（带HS）片段${i + 1}: "(空)"`);
+        // 跳过空的商品列表
+        if (!cargoList || cargoList.trim() === '') {
+          console.log(`总提单OK件（带HS）片段${i + 1}: "(空，跳过)"`);
+          continue;
         }
+
+        // 确定颜色：偶数索引(0,2,4,6)红色，奇数索引(1,3,5)黑色
+        const isRed = i % 2 === 0; // 0-based: 0,2,4,6 是红色（对应第1,3,5,7个）
+        const color = isRed ? 'FF0000' : '000000'; // 红色: FF0000, 黑色: 000000
+
+        // 字体配置
+        const font = {
+          name: 'Times New Roman',
+          color: { argb: color }
+        };
+
+        // 如果前面已经有内容，先添加逗号分隔符
+        if (hasContent) {
+          // 逗号用黑色，Times New Roman字体
+          newRichText.push({
+            font: {
+              name: 'Times New Roman',
+              color: { argb: '000000' } // 黑色逗号
+            },
+            text: ', '
+          });
+        }
+
+        // 添加商品列表片段
+        newRichText.push({
+          font: font,
+          text: cargoList
+        });
+
+        hasContent = true;
+        console.log(`总提单OK件（带HS）片段${i + 1}: "${cargoList}" (颜色: ${isRed ? '红色' : '黑色'})`);
       }
 
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（带HS）D13单元格已设置 ${newRichText.length} 个片段`);
+      console.log(`总提单OK件（带HS）D13单元格已设置 ${newRichText.length} 个片段，${hasContent ? '有内容' : '无内容'}`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
@@ -901,33 +921,53 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       console.log(`总提单OK件（无HS）D13片段数: ${originalRichText.length}`);
       console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
 
-      // 创建新的富文本，为每个舱单分配一个片段（固定7个片段）
+      // 创建新的富文本，按照指定格式：第1,3,5,7个片段红色，第2,4,6个片段黑色，字体Times New Roman
       const newRichText = [];
+      let hasContent = false; // 标记前面是否已经有内容
 
       for (let i = 0; i < 7; i++) {
-        // 获取字体样式：优先使用对应片段的字体，否则使用第一个片段的字体
-        const font = originalRichText[i] ? originalRichText[i].font :
-                    (originalRichText[0] ? originalRichText[0].font : {});
+        const cargoList = cargoListsWithoutHS[i];
 
-        if (i < cargoListsWithoutHS.length) {
-          // 有数据的舱单
-          newRichText.push({
-            font: font,
-            text: cargoListsWithoutHS[i]
-          });
-          console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoListsWithoutHS[i]}" (字体: ${font.color ? '有颜色' : '默认'})`);
-        } else {
-          // 无数据的舱单
-          newRichText.push({
-            font: font,
-            text: ''
-          });
-          console.log(`总提单OK件（无HS）片段${i + 1}: "(空)"`);
+        // 跳过空的商品列表
+        if (!cargoList || cargoList.trim() === '') {
+          console.log(`总提单OK件（无HS）片段${i + 1}: "(空，跳过)"`);
+          continue;
         }
+
+        // 确定颜色：偶数索引(0,2,4,6)红色，奇数索引(1,3,5)黑色
+        const isRed = i % 2 === 0; // 0-based: 0,2,4,6 是红色（对应第1,3,5,7个）
+        const color = isRed ? 'FF0000' : '000000'; // 红色: FF0000, 黑色: 000000
+
+        // 字体配置
+        const font = {
+          name: 'Times New Roman',
+          color: { argb: color }
+        };
+
+        // 如果前面已经有内容，先添加逗号分隔符
+        if (hasContent) {
+          // 逗号用黑色，Times New Roman字体
+          newRichText.push({
+            font: {
+              name: 'Times New Roman',
+              color: { argb: '000000' } // 黑色逗号
+            },
+            text: ', '
+          });
+        }
+
+        // 添加商品列表片段
+        newRichText.push({
+          font: font,
+          text: cargoList
+        });
+
+        hasContent = true;
+        console.log(`总提单OK件（无HS）片段${i + 1}: "${cargoList}" (颜色: ${isRed ? '红色' : '黑色'})`);
       }
 
       goodsListCell.value = { richText: newRichText };
-      console.log(`总提单OK件（无HS）D13单元格已设置 ${newRichText.length} 个片段`);
+      console.log(`总提单OK件（无HS）D13单元格已设置 ${newRichText.length} 个片段，${hasContent ? '有内容' : '无内容'}`);
     }
 
     // 更新第22行的求和公式（数据行范围：15-21行）
