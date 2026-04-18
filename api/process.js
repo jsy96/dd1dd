@@ -438,7 +438,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
 }
 
 // 生成总提单OK件（带HS）Excel 文档
-async function generateOKBillWithHS(firstData, allCargoData) {
+async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
   const templatePath = path.join(__dirname, '../templates/总提单OK件的格式(带HS的.xlsx');
   const templateBuffer = await fs.readFile(templatePath);
 
@@ -555,9 +555,10 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     const englishNames = cargo.英文品名 || '';
     const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
 
-    // 使用默认HS编码
+    // 使用HS编码映射表或默认值
     const goodsWithHS = goodsList.map((goods) => {
-      return `${goods} 88886666`;
+      const hsCode = hsCodeMap && hsCodeMap[goods] ? hsCodeMap[goods] : '88886666';
+      return `${goods} ${hsCode}`;
     });
 
     // 用逗号连接成字符串
@@ -1004,6 +1005,18 @@ module.exports = async (req, res) => {
     // 确保是数组
     const files = Array.isArray(manifestFiles) ? manifestFiles : [manifestFiles];
 
+    // 解析HS编码映射表
+    let hsCodeMap = null;
+    const hsCodeMapField = formData.fields.hsCodeMap;
+    if (hsCodeMapField) {
+      try {
+        hsCodeMap = JSON.parse(hsCodeMapField);
+        console.log(`收到HS编码映射表，共 ${Object.keys(hsCodeMap).length} 条记录`);
+      } catch (e) {
+        console.error('解析HS编码映射表失败:', e.message);
+      }
+    }
+
     console.log(`开始批量处理 ${files.length} 个文件`);
 
     // 收集所有舱单数据用于生成汇总文件
@@ -1068,7 +1081,7 @@ module.exports = async (req, res) => {
         console.log(`生成汇总文件: A/${safeBillNumber}并单保函的格式.docx`);
 
         // 生成总提单OK件（带HS）
-        const okWithHSBuffer = await generateOKBillWithHS(firstCargoData, allCargoData);
+        const okWithHSBuffer = await generateOKBillWithHS(firstCargoData, allCargoData, hsCodeMap);
         archive.append(okWithHSBuffer, { name: `A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx` });
         console.log(`生成汇总文件: A/${safeBillNumber}总提单OK件的格式(带HS的.xlsx`);
 
