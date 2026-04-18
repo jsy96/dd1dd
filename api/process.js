@@ -7,7 +7,6 @@ const ExcelJS = require('exceljs');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 const archiver = require('archiver');
-const { getHSCodes } = require('./feishu-service');
 
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
@@ -556,13 +555,9 @@ async function generateOKBillWithHS(firstData, allCargoData) {
     const englishNames = cargo.英文品名 || '';
     const goodsList = englishNames.split(',').map(s => s.trim()).filter(item => item !== '');
 
-    // 从飞书表格获取HS编码
-    const hsCodes = await getHSCodes(goodsList);
-
-    // 为每个商品添加对应的HS编码
-    const goodsWithHS = goodsList.map((goods, index) => {
-      const hsCode = hsCodes[index] || '88886666';
-      return `${goods} ${hsCode}`;
+    // 使用默认HS编码
+    const goodsWithHS = goodsList.map((goods) => {
+      return `${goods} 88886666`;
     });
 
     // 用逗号连接成字符串
