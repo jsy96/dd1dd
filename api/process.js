@@ -1037,6 +1037,16 @@ async function generateSummaryWithHS(firstData, allCargoData, hsCodeMap = null) 
       containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
       containerData[`体积${suffix}`] = safeToInt(cargo.体积);
       containerData[`提单号${suffix}`] = cargo.提单号 || '';
+      // 提单号为空时，单位也设为空
+      if (!cargo.提单号) {
+        containerData[`数量单位${suffix}`] = '';
+        containerData[`重量单位${suffix}`] = '';
+        containerData[`体积单位${suffix}`] = '';
+      } else {
+        containerData[`数量单位${suffix}`] = 'CTNS';
+        containerData[`重量单位${suffix}`] = 'KGS';
+        containerData[`体积单位${suffix}`] = 'CBM/';
+      }
     } else {
       containerData[`箱号${suffix}`] = '';
       containerData[`封号${suffix}`] = '';
@@ -1045,6 +1055,9 @@ async function generateSummaryWithHS(firstData, allCargoData, hsCodeMap = null) 
       containerData[`毛重${suffix}`] = '';
       containerData[`体积${suffix}`] = '';
       containerData[`提单号${suffix}`] = '';
+      containerData[`数量单位${suffix}`] = '';
+      containerData[`重量单位${suffix}`] = '';
+      containerData[`体积单位${suffix}`] = '';
     }
   }
 
