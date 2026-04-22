@@ -73,7 +73,15 @@ function parseManifestExcel(buffer) {
   if (totalSection) {
     const r = totalSection.titleRow + 2;
     data.提单号 = getCellValue(r, totalSection.colMap['提单号']);
-    data.英文品名 = getCellValue(r, totalSection.colMap['英文品名']).replace(/[\r\n]+/g, ',');
+    const rawEnglishName = getCellValue(r, totalSection.colMap['英文品名']);
+    // 源头清洗：将所有分隔符（换行符、分号、竖线等）统一为逗号
+    const cleanedEnglishName = rawEnglishName
+      .replace(/["""]/g, '')
+      .replace(/[\r\n\v\f;|]+/g, ',')
+      .replace(/,+/g, ',')
+      .replace(/^,|,$/g, '');
+    data.英文品名 = cleanedEnglishName;
+    console.log('英文品名 清洗后:', cleanedEnglishName);
     data.件数 = getCellValue(r, totalSection.colMap['件数']);
     data.毛重 = getCellValue(r, totalSection.colMap['毛重']);
     data.体积 = getCellValue(r, totalSection.colMap['体积']);
@@ -133,6 +141,18 @@ function replacePlaceholder(cell, placeholder, replacement) {
   return true;
 }
 
+// 将英文品名字符串中的各种分隔符统一为逗号，再拆分为数组
+// 支持：逗号、换行符(\r\n)、竖线、分号、引号包裹等
+function splitGoodsList(englishNames) {
+  if (!englishNames) return [];
+  return englishNames
+    .replace(/["""]/g, '')
+    .replace(/[\r\n\v\f;|]+/g, ',')
+    .split(',')
+    .map(s => s.trim())
+    .filter(item => item !== '');
+}
+
 // 生成 Word 文档
 async function generateWordDocument(data) {
   const templatePath = path.join(__dirname, '../templates/提单确认件的格式.docx');
@@ -146,7 +166,7 @@ async function generateWordDocument(data) {
 
   // 商品列表 - 严格按舱单文件中的英文品名数量处理
   const englishNames = data.英文品名 || '';
-  const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+  const goodsList = splitGoodsList(englishNames);
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
     console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
@@ -198,7 +218,7 @@ async function generateExcelDocument(data) {
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = data.英文品名 || '';
-  const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+  const goodsList = splitGoodsList(englishNames);
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
     console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
@@ -287,7 +307,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
 
   // 商品列表 - 严格按舱单文件中的英文品名数量处理（使用第一个文件的数据）
   const englishNames = firstData.英文品名 || '';
-  const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+  const goodsList = splitGoodsList(englishNames);
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
     console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
@@ -389,7 +409,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = firstData.英文品名 || '';
-  const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+  const goodsList = splitGoodsList(englishNames);
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
     console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
@@ -448,7 +468,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
   for (let i = 0; i < allCargoData.length; i++) {
     const cargo = allCargoData[i];
     const englishNames = cargo.英文品名 || '';
-    const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+    const goodsList = splitGoodsList(englishNames);
 
     // 使用HS编码映射表或默认值
     const goodsWithHS = goodsList.map((goods) => {
@@ -621,7 +641,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = firstData.英文品名 || '';
-  const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+  const goodsList = splitGoodsList(englishNames);
   // 确保商品数量不超过22个，如果超过则截断并记录警告
   if (goodsList.length > 22) {
     console.warn(`警告：舱单文件中有 ${goodsList.length} 个英文品名，但模板只支持22个商品。将截断超出的部分。`);
@@ -680,7 +700,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   for (let i = 0; i < allCargoData.length; i++) {
     const cargo = allCargoData[i];
     const englishNames = cargo.英文品名 || '';
-    const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+    const goodsList = splitGoodsList(englishNames);
     // 用逗号连接成字符串
     const cargoListString = goodsList.join(', ');
     cargoListsWithoutHS.push(cargoListString);
@@ -846,7 +866,7 @@ async function generateSummaryWithHS(firstData, allCargoData, hsCodeMap = null) 
   for (let i = 0; i < allCargoData.length; i++) {
     const cargo = allCargoData[i];
     const englishNames = cargo.英文品名 || '';
-    const goodsList = englishNames.replace(/[\r\n]+/g, ',').split(',').map(s => s.trim()).filter(item => item !== '');
+    const goodsList = splitGoodsList(englishNames);
 
     // 使用HS编码映射表或默认值
     const goodsWithHS = goodsList.map((goods) => {
