@@ -73,7 +73,7 @@ function parseManifestExcel(buffer) {
   if (totalSection) {
     const r = totalSection.titleRow + 2;
     data.提单号 = getCellValue(r, totalSection.colMap['提单号']);
-    data.英文品名 = getCellValue(r, totalSection.colMap['英文品名']);
+    data.英文品名 = getCellValue(r, totalSection.colMap['英文品名']).replace(/\n/g, ',');
     data.件数 = getCellValue(r, totalSection.colMap['件数']);
     data.毛重 = getCellValue(r, totalSection.colMap['毛重']);
     data.体积 = getCellValue(r, totalSection.colMap['体积']);
