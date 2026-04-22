@@ -8,6 +8,27 @@ const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
 const archiver = require('archiver');
 
+// 通用：搜索标题行并解析表头列号
+function findSectionHeader(jsonData, titleKeyword, fieldMap) {
+  let titleRow = -1;
+  for (let r = 0; r < jsonData.length; r++) {
+    if (String(jsonData[r][0] || '').includes(titleKeyword)) {
+      titleRow = r;
+      break;
+    }
+  }
+  if (titleRow === -1) return null;
+  const headerRow = jsonData[titleRow + 1] || [];
+  const colMap = {};
+  headerRow.forEach((val, idx) => {
+    const name = String(val || '').trim();
+    if (fieldMap[name]) {
+      colMap[fieldMap[name]] = idx;
+    }
+  });
+  return { titleRow, colMap };
+}
+
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -26,81 +47,42 @@ function parseManifestExcel(buffer) {
     return String(rowData[col] || '').trim();
   };
 
-  // 1. 预配舱单：固定位置读取
-  const common = {
+  const data = {
+    // 预配舱单：固定位置
     船名: getCellValue(3, 1),
     航次: getCellValue(3, 4),
     目的港: getCellValue(3, 7),
-    总提单号: getCellValue(4, 1),
   };
 
-  // 2. 搜索"明细品名及数据"区域
-  let detailTitleRow = -1;
-  for (let r = 0; r < jsonData.length; r++) {
-    if (String(jsonData[r][0] || '').includes('明细品名及数据')) {
-      detailTitleRow = r;
-      break;
-    }
-  }
-  if (detailTitleRow === -1) {
-    throw new Error('找不到"明细品名及数据"区域');
-  }
-
-  // 3. 解析表头行，确定各字段所在列号
-  const headerRowIndex = detailTitleRow + 1;
-  const headerRow = jsonData[headerRowIndex] || [];
-  const colMap = {};
-  const headerFieldMap = {
-    '提单号': '提单号',
-    '箱号': '箱号',
-    '封号': '封号',
-    '箱型': '箱型',
-    '英文品名': '英文品名',
-    '件数': '件数',
-    '包装单位': '包装单位',
-    '毛重(KGS)': '毛重',
-    '体积(CBM)': '体积',
-    '唛头': '唛头',
-  };
-  headerRow.forEach((val, idx) => {
-    const name = String(val || '').trim();
-    if (headerFieldMap[name]) {
-      colMap[headerFieldMap[name]] = idx;
-    }
+  // 按箱统计数据：第一行读取 箱号、封号、箱型
+  const boxSection = findSectionHeader(jsonData, '按箱统计数据', {
+    '箱号': '箱号', '封号': '封号', '箱型': '箱型',
   });
-
-  // 4. 读取数据行（从表头下一行开始，直到空行或下一个区域标题）
-  const items = [];
-  for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
-    const row = jsonData[r];
-    const firstCell = String(row[0] || '').trim();
-    if (firstCell === '') break;
-    if (firstCell.includes('VGM') || firstCell.includes('发货人') || firstCell.includes('收货人') || firstCell.includes('通知人')) break;
-
-    items.push({
-      提单号: getCellValue(r, colMap['提单号']),
-      箱号: getCellValue(r, colMap['箱号']),
-      封号: getCellValue(r, colMap['封号']),
-      箱型: getCellValue(r, colMap['箱型']),
-      英文品名: getCellValue(r, colMap['英文品名']),
-      件数: getCellValue(r, colMap['件数']),
-      包装单位: getCellValue(r, colMap['包装单位']),
-      毛重: getCellValue(r, colMap['毛重']),
-      体积: getCellValue(r, colMap['体积']),
-      唛头: getCellValue(r, colMap['唛头']),
-    });
+  if (boxSection) {
+    const r = boxSection.titleRow + 2;
+    data.箱号 = getCellValue(r, boxSection.colMap['箱号']);
+    data.封号 = getCellValue(r, boxSection.colMap['封号']);
+    data.箱型 = getCellValue(r, boxSection.colMap['箱型']);
   }
 
-  if (items.length === 0) {
-    throw new Error('"明细品名及数据"区域没有数据行');
-  }
-
-  console.log('DEBUG parseManifestExcel: 总提单号:', common.总提单号, '明细品名行数:', items.length);
-  items.forEach((item, i) => {
-    console.log(`  item[${i}]: 提单号=${item.提单号}, 英文品名=${item.英文品名}, 件数=${item.件数}, 毛重=${item.毛重}, 体积=${item.体积}`);
+  // 总票统计数据：读取 提单号、英文品名、件数、毛重、体积、唛头
+  const totalSection = findSectionHeader(jsonData, '总票统计数据', {
+    '提单号': '提单号', '英文品名': '英文品名',
+    '件数': '件数', '毛重(KGS)': '毛重', '体积(CBM)': '体积', '唛头': '唛头',
   });
+  if (totalSection) {
+    const r = totalSection.titleRow + 2;
+    data.提单号 = getCellValue(r, totalSection.colMap['提单号']);
+    data.英文品名 = getCellValue(r, totalSection.colMap['英文品名']);
+    data.件数 = getCellValue(r, totalSection.colMap['件数']);
+    data.毛重 = getCellValue(r, totalSection.colMap['毛重']);
+    data.体积 = getCellValue(r, totalSection.colMap['体积']);
+    data.唛头 = getCellValue(r, totalSection.colMap['唛头']);
+  }
 
-  return { common, items };
+  console.log('DEBUG parseManifestExcel:', JSON.stringify(data, null, 2));
+
+  return data;
 }
 
 // 安全转换为整数：如果是数字或数字字符串则转换为整数，否则返回空字符串
@@ -433,7 +415,7 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`毛重${suffix}`] = safeToInt(cargo.毛重);
         containerData[`体积${suffix}`] = safeToInt(cargo.体积);
         // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号
-        containerData[`并单号${suffix}`] = firstData.总提单号 || '';
+        containerData[`并单号${suffix}`] = firstData.提单号 || '';
       }
     } else {
       // 没有更多舱单数据
@@ -475,14 +457,14 @@ async function generateCombinedLetter(firstData, allCargoData) {
     船名: firstData.船名,
     航次: firstData.航次,
     目的港: firstData.目的港,
-    提单号: firstData.总提单号,
+    提单号: firstData.提单号,
     箱号: firstData.箱号,
     封号: firstData.封号,
     箱型: firstData.箱型,
     件数: safeToInt(firstData.件数),
     毛重: safeToInt(firstData.毛重),
     体积: safeToInt(firstData.体积),
-    并单号: firstData.总提单号,
+    并单号: firstData.提单号,
     ...goodsData,
     ...containerData,
   });
@@ -558,14 +540,14 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
     '{船名}': firstData.船名 || '',
     '{航次}': firstData.航次 || '',
     '{目的港}': firstData.目的港 || '',
-    '{提单号}': firstData.总提单号 || '',
+    '{提单号}': firstData.提单号 || '',
     '{箱号}': firstData.箱号 || '',
     '{封号}': firstData.封号 || '',
     '{箱型}': firstData.箱型 || '',
     '{件数}': safeToInt(firstData.件数),
     '{毛重}': safeToInt(firstData.毛重),
     '{体积}': safeToInt(firstData.体积),
-    '{并单号}': firstData.总提单号 || '',
+    '{并单号}': firstData.提单号 || '',
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
@@ -588,7 +570,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
       replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
-      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.总提单号 || '') : '';
+      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -623,7 +605,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
   }
 
   console.log('总提单OK件（带HS）替换数据:', {
-    提单号: firstData.总提单号,
+    提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
@@ -831,14 +813,14 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     '{船名}': firstData.船名 || '',
     '{航次}': firstData.航次 || '',
     '{目的港}': firstData.目的港 || '',
-    '{提单号}': firstData.总提单号 || '',
+    '{提单号}': firstData.提单号 || '',
     '{箱号}': firstData.箱号 || '',
     '{封号}': firstData.封号 || '',
     '{箱型}': firstData.箱型 || '',
     '{件数}': safeToInt(firstData.件数),
     '{毛重}': safeToInt(firstData.毛重),
     '{体积}': safeToInt(firstData.体积),
-    '{并单号}': firstData.总提单号 || '',
+    '{并单号}': firstData.提单号 || '',
   };
 
   // 添加商品占位符替换数据 - 只使用舱单文件中存在的商品
@@ -861,7 +843,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
       replacementData[`{毛重${suffix}}`] = safeToInt(cargo.毛重);
       replacementData[`{体积${suffix}}`] = safeToInt(cargo.体积);
       // 如果当前舱单的提单号不为空，并单号等于第一个舱单的提单号；否则为空
-      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.总提单号 || '') : '';
+      replacementData[`{并单号${suffix}}`] = cargo.提单号 ? (firstData.提单号 || '') : '';
     } else {
       // 填充空的占位符
       replacementData[`{提单号${suffix}}`] = '';
@@ -889,7 +871,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   }
 
   console.log('总提单OK件（无HS）替换数据:', {
-    提单号: firstData.总提单号,
+    提单号: firstData.提单号,
     商品列表长度: goodsList.length,
     商品列表内容: goodsList,
     提单号总数: allCargoData.length,
@@ -1119,7 +1101,7 @@ async function generateSummaryWithHS(firstData, allCargoData, hsCodeMap = null) 
     船名: firstData.船名,
     航次: firstData.航次,
     目的港: firstData.目的港,
-    提单号: firstData.总提单号,
+    提单号: firstData.提单号,
     总件数: totalPieces.toString(),
     总毛重: totalWeight.toString(),
     总体积: totalVolume.toString(),
@@ -1197,33 +1179,26 @@ module.exports = async (req, res) => {
       console.log(`处理第 ${i + 1} 个文件: ${file.filename || '未命名文件'}`);
 
       try {
-        const parsed = parseManifestExcel(file.buffer);
+        const cargoData = parseManifestExcel(file.buffer);
 
-        // 处理每个明细行
-        for (let j = 0; j < parsed.items.length; j++) {
-          const item = parsed.items[j];
-          const cargoData = { ...parsed.common, ...item };
-
-          // 收集数据用于汇总文件
-          allCargoData.push(cargoData);
-          if (!firstCargoData) {
-            firstCargoData = cargoData;
-          }
-
-          const wordBuffer = await generateWordDocument(cargoData);
-          const excelBuffer = await generateExcelDocument(cargoData);
-
-          // 生成安全文件名
-          const safeBillName = cargoData.提单号 ? cargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : `bill_${allCargoData.length}`;
-          const safeContainerName = cargoData.箱号 ? `${cargoData.箱号.replace(/[^a-zA-Z0-9]/g, '_')}_${safeBillName}` : `container_${allCargoData.length}`;
-
-          // 添加到 ZIP，按文件夹结构组织
-          archive.append(wordBuffer, { name: `A/B/${safeBillName}.docx` });
-          archive.append(excelBuffer, { name: `A/C/${safeContainerName}.xlsx` });
-
-          console.log(`  明细 ${j + 1}: 提单号=${cargoData.提单号}, 箱号=${cargoData.箱号}`);
-          console.log(`    文件名: B/${safeBillName}.docx, C/${safeContainerName}.xlsx`);
+        // 收集数据用于汇总文件
+        allCargoData.push(cargoData);
+        if (!firstCargoData) {
+          firstCargoData = cargoData;
         }
+
+        const wordBuffer = await generateWordDocument(cargoData);
+        const excelBuffer = await generateExcelDocument(cargoData);
+
+        // 生成安全文件名
+        const safeBillName = cargoData.提单号 ? cargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : `bill_${i + 1}`;
+        const safeContainerName = cargoData.箱号 ? cargoData.箱号.replace(/[^a-zA-Z0-9]/g, '_') : `container_${i + 1}`;
+
+        // 添加到 ZIP，按文件夹结构组织
+        archive.append(wordBuffer, { name: `A/B/${safeBillName}.docx` });
+        archive.append(excelBuffer, { name: `A/C/${safeContainerName}.xlsx` });
+
+        console.log(`文件 ${i + 1} 处理完成: 总提单号=${cargoData.提单号}, 箱号=${cargoData.箱号}`);
       } catch (fileError) {
         console.error(`处理文件 ${i + 1} 失败:`, fileError);
         continue;
@@ -1233,7 +1208,7 @@ module.exports = async (req, res) => {
     // 生成三个汇总文件（使用第一个文件的数据）
     if (firstCargoData) {
       try {
-        const safeBillNumber = firstCargoData.总提单号 ? firstCargoData.总提单号.replace(/[^a-zA-Z0-9]/g, '_') : '汇总';
+        const safeBillNumber = firstCargoData.提单号 ? firstCargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : '汇总';
 
         // 生成并单保函
         const combinedLetterBuffer = await generateCombinedLetter(firstCargoData, allCargoData);

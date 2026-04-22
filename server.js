@@ -29,6 +29,27 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB 限制
 });
 
+// 通用：搜索标题行并解析表头列号
+function findSectionHeader(jsonData, titleKeyword, fieldMap) {
+  let titleRow = -1;
+  for (let r = 0; r < jsonData.length; r++) {
+    if (String(jsonData[r][0] || '').includes(titleKeyword)) {
+      titleRow = r;
+      break;
+    }
+  }
+  if (titleRow === -1) return null;
+  const headerRow = jsonData[titleRow + 1] || [];
+  const colMap = {};
+  headerRow.forEach((val, idx) => {
+    const name = String(val || '').trim();
+    if (fieldMap[name]) {
+      colMap[fieldMap[name]] = idx;
+    }
+  });
+  return { titleRow, colMap };
+}
+
 // 解析舱单 Excel 文件
 function parseManifestExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -47,81 +68,42 @@ function parseManifestExcel(buffer) {
     return String(rowData[col] || '').trim();
   };
 
-  // 1. 预配舱单：固定位置读取
-  const common = {
+  const data = {
+    // 预配舱单：固定位置
     船名: getCellValue(3, 1),
     航次: getCellValue(3, 4),
     目的港: getCellValue(3, 7),
-    总提单号: getCellValue(4, 1),
   };
 
-  // 2. 搜索"明细品名及数据"区域
-  let detailTitleRow = -1;
-  for (let r = 0; r < jsonData.length; r++) {
-    if (String(jsonData[r][0] || '').includes('明细品名及数据')) {
-      detailTitleRow = r;
-      break;
-    }
-  }
-  if (detailTitleRow === -1) {
-    throw new Error('找不到"明细品名及数据"区域');
-  }
-
-  // 3. 解析表头行，确定各字段所在列号
-  const headerRowIndex = detailTitleRow + 1;
-  const headerRow = jsonData[headerRowIndex] || [];
-  const colMap = {};
-  const headerFieldMap = {
-    '提单号': '提单号',
-    '箱号': '箱号',
-    '封号': '封号',
-    '箱型': '箱型',
-    '英文品名': '英文品名',
-    '件数': '件数',
-    '包装单位': '包装单位',
-    '毛重(KGS)': '毛重',
-    '体积(CBM)': '体积',
-    '唛头': '唛头',
-  };
-  headerRow.forEach((val, idx) => {
-    const name = String(val || '').trim();
-    if (headerFieldMap[name]) {
-      colMap[headerFieldMap[name]] = idx;
-    }
+  // 按箱统计数据：第一行读取 箱号、封号、箱型
+  const boxSection = findSectionHeader(jsonData, '按箱统计数据', {
+    '箱号': '箱号', '封号': '封号', '箱型': '箱型',
   });
-
-  // 4. 读取数据行
-  const items = [];
-  for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
-    const row = jsonData[r];
-    const firstCell = String(row[0] || '').trim();
-    if (firstCell === '') break;
-    if (firstCell.includes('VGM') || firstCell.includes('发货人') || firstCell.includes('收货人') || firstCell.includes('通知人')) break;
-
-    items.push({
-      提单号: getCellValue(r, colMap['提单号']),
-      箱号: getCellValue(r, colMap['箱号']),
-      封号: getCellValue(r, colMap['封号']),
-      箱型: getCellValue(r, colMap['箱型']),
-      英文品名: getCellValue(r, colMap['英文品名']),
-      件数: getCellValue(r, colMap['件数']),
-      包装单位: getCellValue(r, colMap['包装单位']),
-      毛重: getCellValue(r, colMap['毛重']),
-      体积: getCellValue(r, colMap['体积']),
-      唛头: getCellValue(r, colMap['唛头']),
-    });
+  if (boxSection) {
+    const r = boxSection.titleRow + 2;
+    data.箱号 = getCellValue(r, boxSection.colMap['箱号']);
+    data.封号 = getCellValue(r, boxSection.colMap['封号']);
+    data.箱型 = getCellValue(r, boxSection.colMap['箱型']);
   }
 
-  if (items.length === 0) {
-    throw new Error('"明细品名及数据"区域没有数据行');
-  }
-
-  console.log('DEBUG parseManifestExcel: 总提单号:', common.总提单号, '明细品名行数:', items.length);
-  items.forEach((item, i) => {
-    console.log(`  item[${i}]: 提单号=${item.提单号}, 英文品名=${item.英文品名}`);
+  // 总票统计数据：读取 提单号、英文品名、件数、毛重、体积、唛头
+  const totalSection = findSectionHeader(jsonData, '总票统计数据', {
+    '提单号': '提单号', '英文品名': '英文品名',
+    '件数': '件数', '毛重(KGS)': '毛重', '体积(CBM)': '体积', '唛头': '唛头',
   });
+  if (totalSection) {
+    const r = totalSection.titleRow + 2;
+    data.提单号 = getCellValue(r, totalSection.colMap['提单号']);
+    data.英文品名 = getCellValue(r, totalSection.colMap['英文品名']);
+    data.件数 = getCellValue(r, totalSection.colMap['件数']);
+    data.毛重 = getCellValue(r, totalSection.colMap['毛重']);
+    data.体积 = getCellValue(r, totalSection.colMap['体积']);
+    data.唛头 = getCellValue(r, totalSection.colMap['唛头']);
+  }
 
-  return { common, items };
+  console.log('DEBUG parseManifestExcel:', JSON.stringify(data, null, 2));
+
+  return data;
 }
 
 // 生成 Word 文档
@@ -276,43 +258,33 @@ app.post('/api/process', upload.single('manifest'), async (req, res) => {
     const manifestBuffer = await fs.readFile(req.file.path);
 
     // 解析舱单数据
-    const parsed = parseManifestExcel(manifestBuffer);
+    const cargoData = parseManifestExcel(manifestBuffer);
 
-    const results = [];
-    // 处理每个明细行
-    for (let j = 0; j < parsed.items.length; j++) {
-      const item = parsed.items[j];
-      const cargoData = { ...parsed.common, ...item };
+    // 生成文件
+    const wordBuffer = await generateWordDocument(cargoData);
+    const excelBuffer = await generateExcelDocument(cargoData);
 
-      const wordBuffer = await generateWordDocument(cargoData);
-      const excelBuffer = await generateExcelDocument(cargoData);
+    // 保存文件
+    const timestamp = Date.now();
+    const safeBillName = cargoData.提单号 ? cargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : `bill_${timestamp}`;
+    const wordFileName = `提单确认件_${safeBillName}.doc`;
+    const excelFileName = `装箱单发票_${safeBillName}.xls`;
 
-      const timestamp = Date.now();
-      const safeBillName = cargoData.提单号 ? cargoData.提单号.replace(/[^a-zA-Z0-9]/g, '_') : `bill_${j + 1}`;
-      const wordFileName = `提单确认件_${safeBillName}_${timestamp}.doc`;
-      const excelFileName = `装箱单发票_${safeBillName}_${timestamp}.xls`;
+    const wordFilePath = path.join(outputDir, wordFileName);
+    const excelFilePath = path.join(outputDir, excelFileName);
 
-      const wordFilePath = path.join(outputDir, wordFileName);
-      const excelFilePath = path.join(outputDir, excelFileName);
-
-      await fs.writeFile(wordFilePath, wordBuffer);
-      await fs.writeFile(excelFilePath, excelBuffer);
-
-      results.push({
-        提单号: cargoData.提单号,
-        wordFileUrl: `/api/download?file=${encodeURIComponent(wordFileName)}`,
-        excelFileUrl: `/api/download?file=${encodeURIComponent(excelFileName)}`,
-      });
-    }
+    await fs.writeFile(wordFilePath, wordBuffer);
+    await fs.writeFile(excelFilePath, excelBuffer);
 
     // 清理上传的临时文件
     await fs.unlink(req.file.path).catch(() => {});
 
     res.json({
       success: true,
-      message: `文件处理成功，共生成 ${results.length} 组文件`,
-      data: parsed,
-      results,
+      message: '文件处理成功',
+      data: cargoData,
+      wordFileUrl: `/api/download?file=${encodeURIComponent(wordFileName)}`,
+      excelFileUrl: `/api/download?file=${encodeURIComponent(excelFileName)}`,
     });
   } catch (error) {
     console.error('处理文件失败:', error);
