@@ -452,7 +452,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
 
     // 使用HS编码映射表或默认值
     const goodsWithHS = goodsList.map((goods) => {
-      const hsCode = hsCodeMap && hsCodeMap[goods] ? hsCodeMap[goods] : '88886666';
+      const hsCode = hsCodeMap && hsCodeMap[goods.toUpperCase()] ? hsCodeMap[goods.toUpperCase()] : '88886666';
       return `${goods} ${hsCode}`;
     });
 
@@ -850,7 +850,7 @@ async function generateSummaryWithHS(firstData, allCargoData, hsCodeMap = null) 
 
     // 使用HS编码映射表或默认值
     const goodsWithHS = goodsList.map((goods) => {
-      const hsCode = hsCodeMap && hsCodeMap[goods] ? hsCodeMap[goods] : '88886666';
+      const hsCode = hsCodeMap && hsCodeMap[goods.toUpperCase()] ? hsCodeMap[goods.toUpperCase()] : '88886666';
       return `${goods} ${hsCode}`;
     });
 
@@ -957,12 +957,16 @@ module.exports = async (req, res) => {
     // 确保是数组
     const files = Array.isArray(manifestFiles) ? manifestFiles : [manifestFiles];
 
-    // 解析HS编码映射表
+    // 解析HS编码映射表，将 key 统一转大写便于匹配
     let hsCodeMap = null;
     const hsCodeMapField = formData.fields.hsCodeMap;
     if (hsCodeMapField) {
       try {
-        hsCodeMap = JSON.parse(hsCodeMapField);
+        const rawMap = JSON.parse(hsCodeMapField);
+        hsCodeMap = {};
+        for (const [key, value] of Object.entries(rawMap)) {
+          hsCodeMap[key.toUpperCase()] = value;
+        }
         console.log(`收到HS编码映射表，共 ${Object.keys(hsCodeMap).length} 条记录`);
       } catch (e) {
         console.error('解析HS编码映射表失败:', e.message);
