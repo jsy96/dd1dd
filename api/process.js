@@ -65,10 +65,10 @@ function parseManifestExcel(buffer) {
     data.箱型 = getCellValue(r, boxSection.colMap['箱型']);
   }
 
-  // 总票统计数据：读取 提单号、英文品名、件数、毛重、体积、唛头
+  // 总票统计数据：读取 提单号、英文品名、件数、毛重、体积
   const totalSection = findSectionHeader(jsonData, '总票统计数据', {
     '提单号': '提单号', '英文品名': '英文品名',
-    '件数': '件数', '毛重(KGS)': '毛重', '体积(CBM)': '体积', '唛头': '唛头',
+    '件数': '件数', '毛重(KGS)': '毛重', '体积(CBM)': '体积',
   });
   if (totalSection) {
     const r = totalSection.titleRow + 2;
@@ -77,7 +77,6 @@ function parseManifestExcel(buffer) {
     data.件数 = getCellValue(r, totalSection.colMap['件数']);
     data.毛重 = getCellValue(r, totalSection.colMap['毛重']);
     data.体积 = getCellValue(r, totalSection.colMap['体积']);
-    data.唛头 = getCellValue(r, totalSection.colMap['唛头']);
   }
 
   console.log('DEBUG parseManifestExcel:', JSON.stringify(data, null, 2));
@@ -101,87 +100,37 @@ function safeToInt(value) {
   return '';
 }
 
-// 更新求和公式（数据行范围：15-21行，求和行：第22行）
-function updateSumFormulasAfterRowDeletion(worksheet, deletedRows) {
-  // 计算在数据行范围（15-21）内删除了多少行
-  const dataRowStart = 15;
-  const dataRowEnd = 21;
-  const originalSumRow = 22; // 原始求和公式所在行
-
-  // 统计在数据行范围内删除了多少行
-  let deletedInDataRange = 0;
-  // 统计在求和行之前删除了多少行（行号小于originalSumRow）
-  let deletedBeforeSum = 0;
-
-  deletedRows.forEach(rowNum => {
-    if (rowNum >= dataRowStart && rowNum <= dataRowEnd) {
-      deletedInDataRange++;
-    }
-    if (rowNum < originalSumRow) {
-      deletedBeforeSum++;
-    }
-  });
-
-  if (deletedInDataRange === 0) {
-    // 没有在数据行范围内删除行，无需更新公式
-    return;
+// Excel 单元格文本读取
+function getCellText(cell) {
+  if (!cell.value) return '';
+  if (typeof cell.value === 'string') return cell.value;
+  if (cell.value.richText) {
+    return cell.value.richText.map(rt => rt.text || '').join('');
   }
+  return '';
+}
 
-  // 计算新的结束行
-  const newDataRowEnd = dataRowEnd - deletedInDataRange;
-  // 计算新的求和行号（原始行号减去之前删除的行数）
-  const newSumRow = originalSumRow - deletedBeforeSum;
-
-  // 更新求和公式
-  // 公式列：C列、E列、G列
-  const formulaColumns = ['C', 'E', 'G'];
-
-  formulaColumns.forEach(col => {
-    const originalCellAddress = `${col}${originalSumRow}`;
-    const newCellAddress = `${col}${newSumRow}`;
-    const cell = worksheet.getCell(newCellAddress);
-
-    // 如果新单元格没有公式，尝试查找包含公式的单元格
-    if (!cell.formula) {
-      // 可能公式在其他行，尝试搜索
-      console.log(`单元格${newCellAddress}没有公式，尝试查找公式...`);
-      // 简单起见，我们假设公式就在新行
-      return;
+// Excel 单元格占位符替换
+function replacePlaceholder(cell, placeholder, replacement) {
+  const text = getCellText(cell);
+  if (!text.includes(placeholder)) return false;
+  if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
+    cell.value = Number(replacement);
+    cell.numFmt = '0';
+    cell.type = 'n';
+  } else {
+    let font = {};
+    if (cell.value?.richText && cell.value.richText.length > 0) {
+      font = cell.value.richText[0].font || {};
     }
-
-    // 解析原始公式，更新引用范围
-    const originalFormula = cell.formula;
-    // 预期公式格式：SUM(C15:C21)
-    const regex = new RegExp(`SUM\\(${col}(\\d+):${col}(\\d+)\\)`, 'i');
-    const match = originalFormula.match(regex);
-
-    if (match) {
-      const startRow = parseInt(match[1], 10);
-      const endRow = parseInt(match[2], 10);
-
-      // 检查公式是否符合预期格式
-      if (startRow === dataRowStart && endRow === dataRowEnd) {
-        // 更新公式
-        const newFormula = `SUM(${col}${dataRowStart}:${col}${newDataRowEnd})`;
-        cell.value = {
-          formula: newFormula,
-          result: null // 清除缓存结果，让Excel重新计算
-        };
-        console.log(`更新公式：${newCellAddress} = ${newFormula}（原公式：${originalFormula}，删除了${deletedInDataRange}行，求和行从${originalSumRow}移动到${newSumRow}）`);
-      } else {
-        // 公式格式不匹配，但可能已经被调整过，尝试更新为新的结束行
-        // 保持起始行不变，更新结束行
-        const newFormula = `SUM(${col}${startRow}:${col}${newDataRowEnd})`;
-        cell.value = {
-          formula: newFormula,
-          result: null
-        };
-        console.log(`更新公式（调整）：${newCellAddress} = ${newFormula}（原公式：${originalFormula}，删除了${deletedInDataRange}行）`);
-      }
-    } else {
-      console.log(`无法解析公式：${newCellAddress} = ${originalFormula}`);
-    }
-  });
+    cell.value = {
+      richText: [{
+        font: font,
+        text: replacement || ''
+      }]
+    };
+  }
+  return true;
 }
 
 // 生成 Word 文档
@@ -246,44 +195,6 @@ async function generateExcelDocument(data) {
   const today = new Date();
   const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const formattedDate = `${months[today.getMonth()]}. ${String(today.getDate()).padStart(2, '0')}. ${today.getFullYear()}`;
-
-  const getCellText = (cell) => {
-    if (!cell.value) return '';
-    if (typeof cell.value === 'string') return cell.value;
-    if (cell.value.richText) {
-      return cell.value.richText.map(rt => rt.text || '').join('');
-    }
-    return '';
-  };
-
-  const replacePlaceholder = (cell, placeholder, replacement) => {
-    const text = getCellText(cell);
-    if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
-        // 设置为数字类型
-        cell.value = Number(replacement);
-        // 设置数字格式为整数（无小数）
-        cell.numFmt = '0';
-        // 设置单元格类型为数字
-        cell.type = 'n';
-      } else {
-        // 非数字值，保持原有格式
-        let font = {};
-        if (cell.value?.richText && cell.value.richText.length > 0) {
-          font = cell.value.richText[0].font || {};
-        }
-        cell.value = {
-          richText: [{
-            font: font,
-            text: replacement || ''
-          }]
-        };
-      }
-      return true;
-    }
-    return false;
-  };
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = data.英文品名 || '';
@@ -418,28 +329,14 @@ async function generateCombinedLetter(firstData, allCargoData) {
         containerData[`并单号${suffix}`] = firstData.提单号 || '';
       }
     } else {
-      // 没有更多舱单数据
-      if (suffix >= 2) {
-        // 对于提单号2及以上，设置字段为空字符串（清空整行）
-        containerData[`提单号${suffix}`] = '';
-        containerData[`箱号${suffix}`] = '';
-        containerData[`箱型${suffix}`] = '';
-        containerData[`封号${suffix}`] = '';
-        containerData[`件数${suffix}`] = '';
-        containerData[`毛重${suffix}`] = '';
-        containerData[`体积${suffix}`] = '';
-        containerData[`并单号${suffix}`] = ''; // 清空并单号字段
-      } else {
-        // 提单号1，设置空字符串
-        containerData[`提单号${suffix}`] = '';
-        containerData[`箱号${suffix}`] = '';
-        containerData[`箱型${suffix}`] = '';
-        containerData[`封号${suffix}`] = '';
-        containerData[`件数${suffix}`] = '';
-        containerData[`毛重${suffix}`] = '';
-        containerData[`体积${suffix}`] = '';
-        containerData[`并单号${suffix}`] = ''; // 清空并单号字段
-      }
+      containerData[`提单号${suffix}`] = '';
+      containerData[`箱号${suffix}`] = '';
+      containerData[`箱型${suffix}`] = '';
+      containerData[`封号${suffix}`] = '';
+      containerData[`件数${suffix}`] = '';
+      containerData[`毛重${suffix}`] = '';
+      containerData[`体积${suffix}`] = '';
+      containerData[`并单号${suffix}`] = '';
     }
   }
 
@@ -489,44 +386,6 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
   const today = new Date();
   const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const formattedDate = `${months[today.getMonth()]}. ${String(today.getDate()).padStart(2, '0')}. ${today.getFullYear()}`;
-
-  const getCellText = (cell) => {
-    if (!cell.value) return '';
-    if (typeof cell.value === 'string') return cell.value;
-    if (cell.value.richText) {
-      return cell.value.richText.map(rt => rt.text || '').join('');
-    }
-    return '';
-  };
-
-  const replacePlaceholder = (cell, placeholder, replacement) => {
-    const text = getCellText(cell);
-    if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
-        // 设置为数字类型
-        cell.value = Number(replacement);
-        // 设置数字格式为整数（无小数）
-        cell.numFmt = '0';
-        // 设置单元格类型为数字
-        cell.type = 'n';
-      } else {
-        // 非数字值，保持原有格式
-        let font = {};
-        if (cell.value?.richText && cell.value.richText.length > 0) {
-          font = cell.value.richText[0].font || {};
-        }
-        cell.value = {
-          richText: [{
-            font: font,
-            text: replacement || ''
-          }]
-        };
-      }
-      return true;
-    }
-    return false;
-  };
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = firstData.英文品名 || '';
@@ -682,10 +541,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
     // 替换D13单元格中的商品列表占位符，保留原始格式
     const goodsListCell = worksheet.getCell('D13');
     if (goodsListCell.value && goodsListCell.value.richText) {
-      const originalRichText = goodsListCell.value.richText;
-
-      console.log(`总提单OK件（带HS）D13片段数: ${originalRichText.length}`);
-      console.log(`总提单OK件（带HS）商品列表数量: ${cargoListsWithHS.length}`);
+      console.log(`总提单OK件（带HS）D13片段数: ${goodsListCell.value.richText.length}`);
 
       // 创建新的富文本，按照指定格式：第1,3,5,7个片段红色，第2,4,6个片段黑色，字体Times New Roman
       const newRichText = [];
@@ -738,7 +594,7 @@ async function generateOKBillWithHS(firstData, allCargoData, hsCodeMap = null) {
 
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
-    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
+
 
     console.log(`总提单OK件（带HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithHS.length} 个商品列表`);
   });
@@ -762,44 +618,6 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
   const today = new Date();
   const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const formattedDate = `${months[today.getMonth()]}. ${String(today.getDate()).padStart(2, '0')}. ${today.getFullYear()}`;
-
-  const getCellText = (cell) => {
-    if (!cell.value) return '';
-    if (typeof cell.value === 'string') return cell.value;
-    if (cell.value.richText) {
-      return cell.value.richText.map(rt => rt.text || '').join('');
-    }
-    return '';
-  };
-
-  const replacePlaceholder = (cell, placeholder, replacement) => {
-    const text = getCellText(cell);
-    if (text.includes(placeholder)) {
-      // 检查替换值是否为数字（整数）
-      if (replacement !== '' && !isNaN(Number(replacement)) && replacement !== null && replacement !== undefined) {
-        // 设置为数字类型
-        cell.value = Number(replacement);
-        // 设置数字格式为整数（无小数）
-        cell.numFmt = '0';
-        // 设置单元格类型为数字
-        cell.type = 'n';
-      } else {
-        // 非数字值，保持原有格式
-        let font = {};
-        if (cell.value?.richText && cell.value.richText.length > 0) {
-          font = cell.value.richText[0].font || {};
-        }
-        cell.value = {
-          richText: [{
-            font: font,
-            text: replacement || ''
-          }]
-        };
-      }
-      return true;
-    }
-    return false;
-  };
 
   // 准备替换数据 - 严格按舱单文件中的英文品名数量处理
   const englishNames = firstData.英文品名 || '';
@@ -948,10 +766,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
     // 替换D13单元格中的商品列表占位符，保留原始格式
     const goodsListCell = worksheet.getCell('D13');
     if (goodsListCell.value && goodsListCell.value.richText) {
-      const originalRichText = goodsListCell.value.richText;
-
-      console.log(`总提单OK件（无HS）D13片段数: ${originalRichText.length}`);
-      console.log(`总提单OK件（无HS）商品列表数量: ${cargoListsWithoutHS.length}`);
+      console.log(`总提单OK件（无HS）D13片段数: ${goodsListCell.value.richText.length}`);
 
       // 创建新的富文本，按照指定格式：第1,3,5,7个片段红色，第2,4,6个片段黑色，字体Times New Roman
       const newRichText = [];
@@ -1004,7 +819,7 @@ async function generateOKBillWithoutHS(firstData, allCargoData) {
 
     // 更新第22行的求和公式（数据行范围：15-21行）
     // 注意：现在不删除行，只清空行内容，因此不需要更新公式
-    // updateSumFormulasAfterRowDeletion(worksheet, rowsToDelete);
+
 
     console.log(`总提单OK件（无HS） Sheet ${sheetIndex + 1} "${worksheet.name}" 替换了 ${replacedCount} 个占位符，清空了 ${rowsToDelete.size} 行，设置了 ${cargoListsWithoutHS.length} 个商品列表`);
   });
@@ -1198,7 +1013,7 @@ module.exports = async (req, res) => {
         archive.append(wordBuffer, { name: `A/B/${safeBillName}.docx` });
         archive.append(excelBuffer, { name: `A/C/${safeContainerName}.xlsx` });
 
-        console.log(`文件 ${i + 1} 处理完成: 总提单号=${cargoData.提单号}, 箱号=${cargoData.箱号}`);
+        console.log(`文件 ${i + 1} 处理完成: 提单号=${cargoData.提单号}, 箱号=${cargoData.箱号}`);
       } catch (fileError) {
         console.error(`处理文件 ${i + 1} 失败:`, fileError);
         continue;
